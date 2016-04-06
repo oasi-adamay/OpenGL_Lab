@@ -1,0 +1,33 @@
+#version 330 core
+precision highp float;
+
+// input data
+in   vec3 vPosition;
+in   vec4 vColor;
+in   vec3 vNormal;
+
+// Ouput data
+out vec4 color;
+
+// Uniform
+uniform   mat4 mtxMinv;
+uniform   vec3 lightDirection;
+uniform   vec3 eyePosition;
+
+
+void main()
+{
+    vec3 normVec = vNormal;	//頂点の法線ベクトル
+
+	vec3  invLight = normalize(mtxMinv * vec4(lightDirection, 0.0)).xyz;
+	vec3  invEye   = normalize(mtxMinv * vec4(eyePosition, 0.0)).xyz;
+	vec3  halfLE   = normalize(invLight + invEye);
+
+	float diffuse  = clamp(dot(normVec, invLight), 0.2, 1.0);
+	float specular = pow(clamp(dot(normVec, halfLE), 0.0, 1.0), 10.0);
+
+	vec4  light    = vec4(vec3(diffuse), 1.0) + vec4(vec3(specular), 1.0);
+
+	color = vColor * light;
+//	color = vec4(1.0,1.0,1.0,1.0);
+}

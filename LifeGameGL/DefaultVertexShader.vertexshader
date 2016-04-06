@@ -1,0 +1,26 @@
+#version 330 core
+
+//input
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec4 color;
+
+//output(varying)
+out   vec3 vPosition;
+out   vec4 vColor;
+out   vec3 vNormal;
+
+//uniform
+uniform	mat4 mtxMVP;
+uniform	mat4 mtxM;
+
+
+void main(){
+	vPosition = (mtxM * vec4(position,1.0)).xyz;
+	vNormal = normal;
+	vColor = color;
+//	vColor = vec4(0.2,0.8,0.2,1.0);
+    gl_Position = mtxMVP * vec4(position,1.0);
+
+}
+
