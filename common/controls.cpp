@@ -23,6 +23,21 @@ GlfwControls::GlfwControls(GLFWwindow* _window){
 
 	speed = 3.0f; // 3 units / second
 	mouseSpeed = 0.005f;
+
+	// Ensure we can capture the escape key being pressed below
+	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+
+	// Hide the mouse and enable unlimited mouvement
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+	// Set the mouse at the center of the screen
+	glfwPollEvents();
+
+	int width;
+	int height;
+	glfwGetWindowSize(window, &width, &height);
+
+	glfwSetCursorPos(window, width / 2, height / 2);
 }
 
 
@@ -31,8 +46,9 @@ GlfwControls::GlfwControls(GLFWwindow* _window){
 
 
 void GlfwControls::computeMatricesFromInputs(){
-	int width = 1024;   ///@@@TODO get windows size
-	int height = 768;
+	int width;
+	int height;
+	glfwGetWindowSize(window, &width, &height);
 
 
 	// glfwGetTime is called only once, the first time this function is called
