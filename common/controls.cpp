@@ -9,26 +9,29 @@ using namespace glm;
 
 #include "controls.hpp"
 
-glm::mat4 ViewMatrix;
-glm::mat4 ProjectionMatrix;
+GlfwControls::GlfwControls(GLFWwindow* _window){
+	window = _window;
+
+	// Initial position : on +Z
+	position = glm::vec3(0, 0, 5);
+	// Initial horizontal angle : toward -Z
+	horizontalAngle = 3.14f;
+	// Initial vertical angle : none
+	verticalAngle = 0.0f;
+	// Initial Field of View
+	initialFoV = 45.0f;
+
+	speed = 3.0f; // 3 units / second
+	mouseSpeed = 0.005f;
+}
 
 
-// Initial position : on +Z
-glm::vec3 position = glm::vec3( 0, 0, 5 ); 
-// Initial horizontal angle : toward -Z
-float horizontalAngle = 3.14f;
-// Initial vertical angle : none
-float verticalAngle = 0.0f;
-// Initial Field of View
-float initialFoV = 45.0f;
-
-float speed = 3.0f; // 3 units / second
-float mouseSpeed = 0.005f;
 
 
 
-void computeMatricesFromInputs(){
-	int width = 1024;
+
+void GlfwControls::computeMatricesFromInputs(){
+	int width = 1024;   ///@@@TODO get windows size
 	int height = 768;
 
 
@@ -99,18 +102,18 @@ void computeMatricesFromInputs(){
 	lastTime = currentTime;
 }
 
-glm::mat4 getViewMatrix(){
+glm::mat4 GlfwControls::getViewMatrix(){
 	return ViewMatrix;
 }
-glm::mat4 getProjectionMatrix(){
+glm::mat4 GlfwControls::getProjectionMatrix(){
 	return ProjectionMatrix;
 }
 
-glm::vec3 getCameraPosition(){
+glm::vec3 GlfwControls::getCameraPosition(){
 	return position;
 }
 
-void setCameraPosition(vec3 _position){
+void GlfwControls::setCameraPosition(vec3 _position){
 	position = _position;
 }
 
