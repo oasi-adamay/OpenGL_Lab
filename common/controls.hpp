@@ -5,5 +5,7 @@ void computeMatricesFromInputs();
 glm::mat4 getViewMatrix();
 glm::mat4 getProjectionMatrix();
 glm::vec3 getCameraPosition();
+void setCameraPosition(vec3 _position);
+
 
 #endif

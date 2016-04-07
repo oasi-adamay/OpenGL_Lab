@@ -7,9 +7,9 @@ using namespace glm;
 
 
 struct GVertexAttribute{
-	f32vec3 position;		///<vertex local position
-	f32vec3 normal;			///<vertex normal vector
-	f32vec4 color;			///<vertex color (rgba)
+	vec3 position;		///<vertex local position
+	vec3 normal;			///<vertex normal vector
+	vec4 color;			///<vertex color (rgba)
 };
 
 
@@ -36,6 +36,7 @@ public:
 	void BindVBO(void);
 	void BindIBO(void);
 	void Draw(void);
+	void DrawInstansing(const GLuint vboInstPos,int instCount);
 
 
 };

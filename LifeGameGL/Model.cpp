@@ -7,11 +7,11 @@
 
 
 
-f32vec3 hsv2rgb(f32vec3 hsv)
+vec3 hsv2rgb(vec3 hsv)
 {
 	float      hh, p, q, t, ff;
 	long        i;
-	f32vec3     out;
+	vec3     out;
 
 	struct hsv_t{
 		float h;
@@ -124,7 +124,7 @@ void GModel::BindVBO(void){
 		
 
 		//position
-		int size = sizeof(f32vec3) / sizeof(float);
+		int size = sizeof(vec3) / sizeof(float);
 		glEnableVertexAttribArray(0);	//enable attribute Location
 		glVertexAttribPointer(
 			0,					// attribute 0. No particular reason for 0, but must match the layout in the shader.
@@ -134,10 +134,10 @@ void GModel::BindVBO(void){
 			stride,				// stride (Specifies the byte offset between consecutive generic vertex attributes)
 			(void* )offset		// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
 			);
-		offset += sizeof(f32vec3);
+		offset += sizeof(vec3);
 
 		//normal
-		size = sizeof(f32vec3) / sizeof(float);
+		size = sizeof(vec3) / sizeof(float);
 		glEnableVertexAttribArray(1);	//enable attribute Location
 		glVertexAttribPointer(
 			1,					// attribute 0. No particular reason for 0, but must match the layout in the shader.
@@ -147,7 +147,7 @@ void GModel::BindVBO(void){
 			stride,				// stride
 			(void*)offset		// array buffer offset
 			);
-		offset += sizeof(f32vec3);
+		offset += sizeof(vec3);
 
 
 		//color
@@ -190,9 +190,40 @@ void GModel::Draw(void){
 	glDisableVertexAttribArray(0);
 
 	glBindVertexArray(0);
+}
 
+void GModel::DrawInstansing(const GLuint vboInstPos, int instCount){
+
+	glBindVertexArray(vao);		//Bind Model VAO
+
+	int attrLoc = 3;		////@@Todo glGetAttribLocation  
+
+	glEnableVertexAttribArray(attrLoc);	//enable attribute Location  
+	glVertexAttribPointer(
+		attrLoc,					// attribute 0. No particular reason for 0, but must match the layout in the shader.
+		3,				// size	(Specifies the number of components)
+		GL_FLOAT,			// type
+		GL_FALSE,			// normalized?
+		0,				// stride (Specifies the byte offset between consecutive generic vertex attributes)
+		(void*)0		// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
+		);
+
+
+	// これらの関数はglDrawArrays *Instanced* 特有です。
+	// 最初のパラメータは注目してる属性バッファです。
+	// 二つ目のパラメータは、複数のインスタンスを描画するときに一般的な頂点属性が進む割合を意味します。
+	// http://www.opengl.org/sdk/docs/man/xhtml/glVertexAttribDivisor.xml
+
+	// インスタンスを有効化し除数を指定する
+	glVertexAttribDivisor(attrLoc, 1); // 位置：modelごとに一つ（中心）->1
+
+	GLsizei elements = (GLsizei)Index.size()*sizeof(u16vec3);
+	glDrawElementsInstanced(GL_TRIANGLES, elements, GL_UNSIGNED_SHORT, 0, instCount);
+
+	glBindVertexArray(0);
 
 }
+
 
 
 
@@ -215,10 +246,10 @@ GModelSphere::GModelSphere(const int rows, const int cols, const float rad)
 			float rz = rr * sin(tr);
 
 			GVertexAttribute vertexAttr;
-			vertexAttr.position = f32vec3(tx, ty, tz);
-			vertexAttr.normal = f32vec3(rx, ry, rz);
+			vertexAttr.position = vec3(tx, ty, tz);
+			vertexAttr.normal = vec3(rx, ry, rz);
 //			vertexAttr.color = f32vec4(1.0, 0.0, 1.0, 1.0);
-			f32vec3 hsv(360.0f / (float)rows * i, 1.0, 1.0);
+			vec3 hsv(360.0f / (float)rows * i, 1.0, 1.0);
 			vertexAttr.color = f32vec4(hsv2rgb(hsv), 1.0);
 
 			VertexAttribute.push_back(vertexAttr);
@@ -281,35 +312,35 @@ GModelCube::GModelCube(const float side){
 	const float hs = side*0.5f;
 	VertexAttribute.resize(4 * 6);
 	int i = 0;
-	VertexAttribute[i++].position = f32vec3(-hs, -hs, hs);
-	VertexAttribute[i++].position = f32vec3(hs, -hs, hs);
-	VertexAttribute[i++].position = f32vec3(hs, hs, hs);
-	VertexAttribute[i++].position = f32vec3(-hs, hs, hs);
+	VertexAttribute[i++].position = vec3(-hs, -hs, hs);
+	VertexAttribute[i++].position = vec3(hs, -hs, hs);
+	VertexAttribute[i++].position = vec3(hs, hs, hs);
+	VertexAttribute[i++].position = vec3(-hs, hs, hs);
 
-	VertexAttribute[i++].position = f32vec3(-hs, -hs, -hs);
-	VertexAttribute[i++].position = f32vec3(-hs, hs, -hs);
-	VertexAttribute[i++].position = f32vec3(hs, hs, -hs);
-	VertexAttribute[i++].position = f32vec3(hs, -hs, -hs);
+	VertexAttribute[i++].position = vec3(-hs, -hs, -hs);
+	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
+	VertexAttribute[i++].position = vec3(hs, hs, -hs);
+	VertexAttribute[i++].position = vec3(hs, -hs, -hs);
 
-	VertexAttribute[i++].position = f32vec3(-hs, hs, -hs);
-	VertexAttribute[i++].position = f32vec3(-hs, hs, hs);
-	VertexAttribute[i++].position = f32vec3(hs, hs, hs);
-	VertexAttribute[i++].position = f32vec3(hs, hs, -hs);
+	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
+	VertexAttribute[i++].position = vec3(-hs, hs, hs);
+	VertexAttribute[i++].position = vec3(hs, hs, hs);
+	VertexAttribute[i++].position = vec3(hs, hs, -hs);
 
-	VertexAttribute[i++].position = f32vec3(-hs, -hs, -hs);
-	VertexAttribute[i++].position = f32vec3(hs, -hs, -hs);
-	VertexAttribute[i++].position = f32vec3(hs, -hs, hs);
-	VertexAttribute[i++].position = f32vec3(-hs, -hs, hs);
+	VertexAttribute[i++].position = vec3(-hs, -hs, -hs);
+	VertexAttribute[i++].position = vec3(hs, -hs, -hs);
+	VertexAttribute[i++].position = vec3(hs, -hs, hs);
+	VertexAttribute[i++].position = vec3(-hs, -hs, hs);
 
-	VertexAttribute[i++].position = f32vec3(hs, -hs, -hs);
-	VertexAttribute[i++].position = f32vec3(hs, hs, -hs);
-	VertexAttribute[i++].position = f32vec3(hs, hs, hs);
-	VertexAttribute[i++].position = f32vec3(hs, -hs, hs);
+	VertexAttribute[i++].position = vec3(hs, -hs, -hs);
+	VertexAttribute[i++].position = vec3(hs, hs, -hs);
+	VertexAttribute[i++].position = vec3(hs, hs, hs);
+	VertexAttribute[i++].position = vec3(hs, -hs, hs);
 
-	VertexAttribute[i++].position = f32vec3(-hs, -hs, -hs);
-	VertexAttribute[i++].position = f32vec3(-hs, -hs, hs);
-	VertexAttribute[i++].position = f32vec3(-hs, hs, hs);
-	VertexAttribute[i++].position = f32vec3(-hs, hs, -hs);
+	VertexAttribute[i++].position = vec3(-hs, -hs, -hs);
+	VertexAttribute[i++].position = vec3(-hs, -hs, hs);
+	VertexAttribute[i++].position = vec3(-hs, hs, hs);
+	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
 
 	Index.resize(2 * 6);
 	i = 0;

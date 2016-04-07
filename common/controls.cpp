@@ -109,3 +109,8 @@ glm::mat4 getProjectionMatrix(){
 glm::vec3 getCameraPosition(){
 	return position;
 }
+
+void setCameraPosition(vec3 _position){
+	position = _position;
+}
+
