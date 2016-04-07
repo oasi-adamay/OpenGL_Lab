@@ -248,9 +248,9 @@ GModelSphere::GModelSphere(const int rows, const int cols, const float rad)
 			GVertexAttribute vertexAttr;
 			vertexAttr.position = vec3(tx, ty, tz);
 			vertexAttr.normal = vec3(rx, ry, rz);
-//			vertexAttr.color = f32vec4(1.0, 0.0, 1.0, 1.0);
+//			vertexAttr.color = vec4(1.0, 0.0, 1.0, 1.0);
 			vec3 hsv(360.0f / (float)rows * i, 1.0, 1.0);
-			vertexAttr.color = f32vec4(hsv2rgb(hsv), 1.0);
+			vertexAttr.color = vec4(hsv2rgb(hsv), 1.0);
 
 			VertexAttribute.push_back(vertexAttr);
 		}
@@ -342,6 +342,44 @@ GModelCube::GModelCube(const float side){
 	VertexAttribute[i++].position = vec3(-hs, hs, hs);
 	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
 
+	i = 0;
+	VertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
+
+	VertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
+
+	VertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
+
+	VertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
+
+	VertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
+
+	VertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
+	VertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
+
+
+	for (int i = 0; i < VertexAttribute.size(); i++){
+		vec3 hsv(360.0f / (float)i, 1.0, 1.0);
+		VertexAttribute[i].color = vec4(hsv2rgb(hsv), 1.0);
+	}
+
+
 	Index.resize(2 * 6);
 	i = 0;
 	Index[i++] = u16vec3(0, 1, 2);
@@ -369,4 +407,14 @@ GModelCube::GModelCube(const float side){
 
 }
 
+/*
+for(var i = 0; i < pos.length / 3; i++){
+if(color){
+var tc = color;
+}else{
+tc = hsva2rgba(360 / pos.length / 3 * i, 1, 1, 1);
+}
+col.push(tc[0], tc[1], tc[2], tc[3]);
+}
 
+*/
