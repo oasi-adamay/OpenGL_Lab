@@ -75,7 +75,8 @@ int createTexture(
 	}
 
 	// Bind our texture in Texture Unit 0
-	glActiveTexture(GL_TEXTURE0);
+//	glActiveTexture(GL_TEXTURE0);
+	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, texid);
 	// (set texture parameters here)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -106,7 +107,8 @@ int uploadTexture(
 	GLint height = 0;
 
 	// Bind our texture in Texture Unit 0
-	glActiveTexture(GL_TEXTURE0);
+//	glActiveTexture(GL_TEXTURE0);
+	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, texId);
 
 	glGetTexLevelParameteriv(
@@ -273,7 +275,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	GlfwControls ctrl(window);
 
 	cv::Mat img = cv::imread("earth512x512.jpg");
-	cv::imshow("Earth",img);
+//	cv::imshow("Earth",img);
 
 
 
@@ -308,7 +310,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	//モデル生成
 	PureModel* pureModel = new PureModelSphere(gy, gx, 0.5f);
-	GlModel* model = new GlModel(pureModel);
+	GlModel* model = new GlModel(pureModel, img);
 
 
 	//Cell生成 (2bank)
@@ -330,7 +332,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	vec3 lightDirection(15.0, 15.0, 15.0);		//平行光源の位置
-	ctrl.setCameraPosition(vec3(0.0, 0.0, 2.0));	//カメラ初期位置
+	ctrl.setCameraPosition(vec3(0.0, 0.0, 1.0));	//カメラ初期位置
 
 
 	long framecount = 0;
@@ -368,7 +370,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			glUniformMatrix4fv(glGetUniformLocation(programID, "mtxMinv"), 1, GL_FALSE, &mtxMinv[0][0]);
 			glUniform3fv(glGetUniformLocation(programID, "lightDirection"), 1, &lightDirection[0]);
 			glUniform3fv(glGetUniformLocation(programID, "eyePosition"), 1, &eyePosition[0]);
-			glUniform1i(glGetUniformLocation(programID,"tex0"), 0);  // = use GL_TEXTURE0
+//			glUniform1i(glGetUniformLocation(programID,"tex0"), 0);  // = use GL_TEXTURE0
+			glUniform1i(glGetUniformLocation(programID,"tex0"), 1);  // = use GL_TEXTURE1
+			glUniform1i(glGetUniformLocation(programID,"texImg"), 0);  // = use GL_TEXTURE0
 
 
 			uploadTexture(textureID[cellBank], &cell[cellBank][0]);

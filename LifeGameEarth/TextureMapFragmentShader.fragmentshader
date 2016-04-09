@@ -16,6 +16,7 @@ uniform   mat4 mtxMinv;
 uniform   vec3 lightDirection;
 uniform   vec3 eyePosition;
 uniform	  sampler2D tex0;
+uniform	  sampler2D texImg;
 
 void main()
 {
@@ -31,11 +32,15 @@ void main()
 	float state   = texture (tex0, vTexCoord).r;
 	state = state/2.0 + 0.5;
 
+	vec4  img = vec4(texture (texImg, vTexCoord).rgb,1.0);
+
 	vec4  light    = vec4(vec3(diffuse), 1.0) + vec4(vec3(specular), 1.0);
 
 
 //	color = vColor * light;
-	color = vec4(state,state,state,1.0)*vColor * light;
+//	color = vec4(state,state,state,1.0)*vColor * light;
 //	color = vec4(state,state,state,1.0)*vColor;
+	color = vec4(state,state,state,1.0)*img;
+//	color = img * light;
 
 }

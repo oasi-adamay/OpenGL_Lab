@@ -82,18 +82,25 @@ GlModel::GlModel(void){
 	vao = 0;
 	vbo = 0;
 	ibo = 0;
+	tex = 0;
 	model = 0;
 }
 
-GlModel::GlModel(PureModel* _model){
+
+GlModel::GlModel(PureModel* _model, const Mat& _texImage){
 	model = _model;
+	texImage = _texImage;
+
 	glGenVertexArrays(1, &vao);
 	CreateVBO();
 	CreateIBO();
+	CreateTexture();
 	BindVBO();
 	BindIBO();
-
 }
+
+
+
 
 
 GlModel::~GlModel(void){
@@ -101,6 +108,8 @@ GlModel::~GlModel(void){
 	if (ibo) glDeleteBuffers(1, &ibo);
 
 	glDeleteVertexArrays(1, &vao);
+
+	if (tex) glDeleteTextures(1, &tex);
 
 }
 
@@ -123,6 +132,48 @@ void GlModel::CreateIBO(void){
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, model->vecIndex.data(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	}
+}
+
+void GlModel::CreateTexture(void){
+	if (texImage.empty()) return;
+
+	cv::cvtColor(texImage, texImage, CV_BGR2RGB);
+	texImage.convertTo(texImage, CV_32FC3, 1.0 / 256.0);
+
+	int width = texImage.cols;
+	int height = texImage.cols;
+	void *data = texImage.data;
+
+
+	glGenTextures(1, &tex); // create (reference to) a new texture
+
+	GLenum format = GL_RGB;
+	GLenum type = GL_FLOAT;
+	GLenum internalFormat = GL_RGB32F;
+
+	//https://www.khronos.org/opengles/sdk/docs/man3/html/glTexImage2D.xhtml
+
+
+	// Bind our texture in Texture Unit 0
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	// (set texture parameters here)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	//create the texture
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, 0);
+
+
+	//upload texture image
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, data);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+
 }
 
 void GlModel::BindVBO(void){
@@ -196,29 +247,43 @@ void GlModel::BindVBO(void){
 }
 
 void GlModel::BindIBO(void){
-
 	if (ibo) {
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 		glBindVertexArray(0);
 
 	}
-
-
 }
+
+
 
 
 void GlModel::Draw(void){
 	if (vao == 0) return;
 
-	glBindVertexArray(vao);
+	if (tex){
+		glBindVertexArray(vao);
+		glEnableVertexAttribArray(0);
 
-	glEnableVertexAttribArray(0);
-	GLsizei elements = (GLsizei)model->vecIndex.size()*sizeof(u16vec3);
-	glDrawElements(GL_TRIANGLES, elements, GL_UNSIGNED_SHORT, 0);
-	glDisableVertexAttribArray(0);
+		glActiveTexture(GL_TEXTURE0);		///@@@@
+		glBindTexture(GL_TEXTURE_2D, tex);
 
-	glBindVertexArray(0);
+		GLsizei elements = (GLsizei)model->vecIndex.size()*sizeof(u16vec3);
+		glDrawElements(GL_TRIANGLES, elements, GL_UNSIGNED_SHORT, 0);
+		glDisableVertexAttribArray(0);
+		glBindVertexArray(0);
+
+
+
+	}
+	else{
+		glBindVertexArray(vao);
+		glEnableVertexAttribArray(0);
+		GLsizei elements = (GLsizei)model->vecIndex.size()*sizeof(u16vec3);
+		glDrawElements(GL_TRIANGLES, elements, GL_UNSIGNED_SHORT, 0);
+		glDisableVertexAttribArray(0);
+		glBindVertexArray(0);
+	}
 }
 
 void GlModel::DrawPoints(void){

@@ -48,23 +48,29 @@ public:
 class GlModel
 {
 private:
-
-
-public:
 	GLuint vbo;
 	GLuint ibo;
 	GLuint vao;
-	PureModel* model;
+	GLuint tex;
 
-	GlModel(void);
-	GlModel(PureModel* _model);
-	~GlModel(void);
+	PureModel* model;
+	Mat texImage;
 
 	void CreateVBO(void);
 	void CreateIBO(void);
+	void CreateTexture(void);
 
 	void BindVBO(void);
 	void BindIBO(void);
+
+public:
+
+	GlModel(void);
+	GlModel(PureModel* _model, const Mat& _texImage = Mat());
+//	GlModel(PureModel* _model);
+	~GlModel(void);
+
+
 	void Draw(void);
 	void DrawPoints(void);
 
