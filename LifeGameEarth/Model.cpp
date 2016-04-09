@@ -1,3 +1,4 @@
+﻿#include "stdafx.h"
 
 #include "Model.h"
 
@@ -5,7 +6,7 @@
 #include <math.h>
 
 
-
+static
 vec3 hsv2rgb(vec3 hsv)
 {
 	float      hh, p, q, t, ff;
@@ -77,16 +78,25 @@ vec3 hsv2rgb(vec3 hsv)
 
 
 
-GModel::GModel(void){
+GlModel::GlModel(void){
 	vao = 0;
 	vbo = 0;
 	ibo = 0;
+	model = 0;
+}
 
+GlModel::GlModel(PureModel* _model){
+	model = _model;
 	glGenVertexArrays(1, &vao);
+	CreateVBO();
+	CreateIBO();
+	BindVBO();
+	BindIBO();
 
 }
 
-GModel::~GModel(void){
+
+GlModel::~GlModel(void){
 	if (vbo) glDeleteBuffers(1, &vbo);
 	if (ibo) glDeleteBuffers(1, &ibo);
 
@@ -95,31 +105,37 @@ GModel::~GModel(void){
 }
 
 
-void GModel::CreateVBO(void){
-	GLsizei size = (GLsizei)VertexAttribute.size()*sizeof(GVertexAttribute);	//in byte
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, size, VertexAttribute.data(), GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+void GlModel::CreateVBO(void){
+	GLsizei size = (GLsizei)model->vecVertexAttribute.size()*sizeof(VertexAttribute);	//in byte
+	if (size){
+		glGenBuffers(1, &vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, size, model->vecVertexAttribute.data(), GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+	}
 }
 
-void GModel::CreateIBO(void){
-	GLsizei size = (GLsizei)Index.size()*sizeof(u16vec3);
-	glGenBuffers(1, &ibo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, Index.data(), GL_STATIC_DRAW);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+void GlModel::CreateIBO(void){
+	GLsizei size = (GLsizei)model->vecIndex.size()*sizeof(u16vec3);
+	if (size){
+		glGenBuffers(1, &ibo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, model->vecIndex.data(), GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	}
 }
 
-void GModel::BindVBO(void){
-	glBindVertexArray(vao);
+void GlModel::BindVBO(void){
 
 	if (vbo) {
+		glBindVertexArray(vao);
+
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
 
 		int offset = 0;
-		int stride = sizeof(GVertexAttribute);
+		int stride = sizeof(VertexAttribute);
+		VertexAttribute* pVtxAttr = NULL;		//sizeofのためのポインタ
 
 		//position
 		int size = sizeof(pVtxAttr->position) / sizeof(float);
@@ -174,39 +190,42 @@ void GModel::BindVBO(void){
 			);
 		offset += sizeof(pVtxAttr->texCoord);
 
+		glBindVertexArray(0);
 	}
-
-	glBindVertexArray(0);
 
 }
 
-void GModel::BindIBO(void){
-	glBindVertexArray(vao);
+void GlModel::BindIBO(void){
 
 	if (ibo) {
+		glBindVertexArray(vao);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBindVertexArray(0);
+
 	}
 
-	glBindVertexArray(0);
 
 }
 
 
-void GModel::Draw(void){
+void GlModel::Draw(void){
+	if (vao == 0) return;
 
 	glBindVertexArray(vao);
 
 	glEnableVertexAttribArray(0);
-	GLsizei elements = (GLsizei)Index.size()*sizeof(u16vec3);
+	GLsizei elements = (GLsizei)model->vecIndex.size()*sizeof(u16vec3);
 	glDrawElements(GL_TRIANGLES, elements, GL_UNSIGNED_SHORT, 0);
 	glDisableVertexAttribArray(0);
 
 	glBindVertexArray(0);
 }
 
-void GModel::DrawPoints(void){
+void GlModel::DrawPoints(void){
+	if (vao == 0) return;
+
 	glBindVertexArray(vao);
-	GLsizei points = (GLsizei)VertexAttribute.size();
+	GLsizei points = (GLsizei)model->vecVertexAttribute.size();
 	glEnableVertexAttribArray(0);
 	glDrawArrays(GL_POINTS, 0, points);
 	glDisableVertexAttribArray(0);
@@ -216,7 +235,8 @@ void GModel::DrawPoints(void){
 
 
 
-void GModel::DrawInstansing(const GLuint vboInstPos, int instCount){
+void GlModel::DrawInstansing(const GLuint vboInstPos, int instCount){
+	if (vao == 0) return;
 
 	glBindVertexArray(vao);		//Bind Model VAO
 
@@ -233,10 +253,15 @@ void GModel::DrawInstansing(const GLuint vboInstPos, int instCount){
 		);
 
 
+	// これらの関数はglDrawArrays *Instanced* 特有です。
+	// 最初のパラメータは注目してる属性バッファです。
+	// 二つ目のパラメータは、複数のインスタンスを描画するときに一般的な頂点属性が進む割合を意味します。
 	// http://www.opengl.org/sdk/docs/man/xhtml/glVertexAttribDivisor.xml
 
+	// インスタンスを有効化し除数を指定する
+	glVertexAttribDivisor(attrLoc, 1); // 位置：modelごとに一つ（中心）->1
 
-	GLsizei elements = (GLsizei)Index.size()*sizeof(u16vec3);
+	GLsizei elements = (GLsizei)model->vecIndex.size()*sizeof(u16vec3);
 	glDrawElementsInstanced(GL_TRIANGLES, elements, GL_UNSIGNED_SHORT, 0, instCount);
 
 	glBindVertexArray(0);
@@ -246,10 +271,10 @@ void GModel::DrawInstansing(const GLuint vboInstPos, int instCount){
 
 
 
-GModelSphere::GModelSphere(const int rows, const int cols, const float rad)
+PureModelSphere::PureModelSphere(const int rows, const int cols, const float rad)
 {
-	VertexAttribute.clear();
-	Index.clear();
+	vecVertexAttribute.clear();
+	vecIndex.clear();
 
 	for (int i = 0; i < rows + 1; i++){
 		float r = (float)M_PI / (float)rows * i;
@@ -264,7 +289,7 @@ GModelSphere::GModelSphere(const int rows, const int cols, const float rad)
 			float rx = rr * cos(tr);
 			float rz = rr * sin(tr);
 
-			GVertexAttribute vertexAttr;
+			VertexAttribute vertexAttr;
 			vertexAttr.position = vec3(tx, ty, tz);
 			vertexAttr.normal = vec3(rx, ry, rz);
 //			vertexAttr.color = vec4(1.0, 0.0, 1.0, 1.0);
@@ -272,24 +297,18 @@ GModelSphere::GModelSphere(const int rows, const int cols, const float rad)
 			vertexAttr.color = vec4(hsv2rgb(hsv), 1.0);
 			vertexAttr.texCoord = vec2(1.0 - j / (float)cols, i / (float)rows);
 
-			VertexAttribute.push_back(vertexAttr);
+			vecVertexAttribute.push_back(vertexAttr);
 		}
 
 		for (int i = 0; i < rows; i++){
 			for (int j = 0; j < cols; j++){
 				int r = (cols + 1) * i + j;
-				Index.push_back(u16vec3(r, r + 1, r + cols + 2));
-				Index.push_back(u16vec3(r, r + cols + 2, r + cols + 1));
+				vecIndex.push_back(u16vec3(r, r + 1, r + cols + 2));
+				vecIndex.push_back(u16vec3(r, r + cols + 2, r + cols + 1));
 			}
 		}
 
 	}
-
-	CreateVBO();
-	CreateIBO();
-	BindVBO();
-	BindIBO();
-
 
 }
 
@@ -328,102 +347,99 @@ return {p : pos, n : nor, c : col, t : st, i : idx};
 
 */
 
-GModelCube::GModelCube(const float side){
+PureModelCube::PureModelCube(const float side){
 	const float hs = side*0.5f;
-	VertexAttribute.resize(4 * 6);
+	vecVertexAttribute.resize(4 * 6);
 	int i = 0;
-	VertexAttribute[i++].position = vec3(-hs, -hs, hs);
-	VertexAttribute[i++].position = vec3(hs, -hs, hs);
-	VertexAttribute[i++].position = vec3(hs, hs, hs);
-	VertexAttribute[i++].position = vec3(-hs, hs, hs);
+	vecVertexAttribute[i++].position = vec3(-hs, -hs, hs);
+	vecVertexAttribute[i++].position = vec3(hs, -hs, hs);
+	vecVertexAttribute[i++].position = vec3(hs, hs, hs);
+	vecVertexAttribute[i++].position = vec3(-hs, hs, hs);
 
-	VertexAttribute[i++].position = vec3(-hs, -hs, -hs);
-	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
-	VertexAttribute[i++].position = vec3(hs, hs, -hs);
-	VertexAttribute[i++].position = vec3(hs, -hs, -hs);
+	vecVertexAttribute[i++].position = vec3(-hs, -hs, -hs);
+	vecVertexAttribute[i++].position = vec3(-hs, hs, -hs);
+	vecVertexAttribute[i++].position = vec3(hs, hs, -hs);
+	vecVertexAttribute[i++].position = vec3(hs, -hs, -hs);
 
-	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
-	VertexAttribute[i++].position = vec3(-hs, hs, hs);
-	VertexAttribute[i++].position = vec3(hs, hs, hs);
-	VertexAttribute[i++].position = vec3(hs, hs, -hs);
+	vecVertexAttribute[i++].position = vec3(-hs, hs, -hs);
+	vecVertexAttribute[i++].position = vec3(-hs, hs, hs);
+	vecVertexAttribute[i++].position = vec3(hs, hs, hs);
+	vecVertexAttribute[i++].position = vec3(hs, hs, -hs);
 
-	VertexAttribute[i++].position = vec3(-hs, -hs, -hs);
-	VertexAttribute[i++].position = vec3(hs, -hs, -hs);
-	VertexAttribute[i++].position = vec3(hs, -hs, hs);
-	VertexAttribute[i++].position = vec3(-hs, -hs, hs);
+	vecVertexAttribute[i++].position = vec3(-hs, -hs, -hs);
+	vecVertexAttribute[i++].position = vec3(hs, -hs, -hs);
+	vecVertexAttribute[i++].position = vec3(hs, -hs, hs);
+	vecVertexAttribute[i++].position = vec3(-hs, -hs, hs);
 
-	VertexAttribute[i++].position = vec3(hs, -hs, -hs);
-	VertexAttribute[i++].position = vec3(hs, hs, -hs);
-	VertexAttribute[i++].position = vec3(hs, hs, hs);
-	VertexAttribute[i++].position = vec3(hs, -hs, hs);
+	vecVertexAttribute[i++].position = vec3(hs, -hs, -hs);
+	vecVertexAttribute[i++].position = vec3(hs, hs, -hs);
+	vecVertexAttribute[i++].position = vec3(hs, hs, hs);
+	vecVertexAttribute[i++].position = vec3(hs, -hs, hs);
 
-	VertexAttribute[i++].position = vec3(-hs, -hs, -hs);
-	VertexAttribute[i++].position = vec3(-hs, -hs, hs);
-	VertexAttribute[i++].position = vec3(-hs, hs, hs);
-	VertexAttribute[i++].position = vec3(-hs, hs, -hs);
+	vecVertexAttribute[i++].position = vec3(-hs, -hs, -hs);
+	vecVertexAttribute[i++].position = vec3(-hs, -hs, hs);
+	vecVertexAttribute[i++].position = vec3(-hs, hs, hs);
+	vecVertexAttribute[i++].position = vec3(-hs, hs, -hs);
 
 	i = 0;
-	VertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
 
-	VertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
 
-	VertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
 
-	VertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
 
-	VertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, -1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, 1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, 1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(1.0, -1.0, 1.0);
 
-	VertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
-	VertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, -1.0, -1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, -1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, 1.0, 1.0);
+	vecVertexAttribute[i++].normal = vec3(-1.0, 1.0, -1.0);
 
 
-	for (int i = 0; i < VertexAttribute.size(); i++){
+	for (int i = 0; i < vecVertexAttribute.size(); i++){
 		vec3 hsv(360.0f / (float)i, 1.0, 1.0);
-		VertexAttribute[i].color = vec4(hsv2rgb(hsv), 1.0);
+		vecVertexAttribute[i].color = vec4(hsv2rgb(hsv), 1.0);
 	}
 
 
-	Index.resize(2 * 6);
+	vecIndex.resize(2 * 6);
 	i = 0;
-	Index[i++] = u16vec3(0, 1, 2);
-	Index[i++] = u16vec3(0, 2, 3);
+	vecIndex[i++] = u16vec3(0, 1, 2);
+	vecIndex[i++] = u16vec3(0, 2, 3);
 
-	Index[i++] = u16vec3(4, 5, 6);
-	Index[i++] = u16vec3(4, 6, 7);
+	vecIndex[i++] = u16vec3(4, 5, 6);
+	vecIndex[i++] = u16vec3(4, 6, 7);
 
-	Index[i++] = u16vec3(8, 9, 10);
-	Index[i++] = u16vec3(8, 10, 11);
+	vecIndex[i++] = u16vec3(8, 9, 10);
+	vecIndex[i++] = u16vec3(8, 10, 11);
 
-	Index[i++] = u16vec3(12, 13, 14);
-	Index[i++] = u16vec3(12, 14, 15);
+	vecIndex[i++] = u16vec3(12, 13, 14);
+	vecIndex[i++] = u16vec3(12, 14, 15);
 
-	Index[i++] = u16vec3(16, 17, 18);
-	Index[i++] = u16vec3(16, 18, 19);
+	vecIndex[i++] = u16vec3(16, 17, 18);
+	vecIndex[i++] = u16vec3(16, 18, 19);
 
-	Index[i++] = u16vec3(20, 21, 22);
-	Index[i++] = u16vec3(20, 22, 23);
+	vecIndex[i++] = u16vec3(20, 21, 22);
+	vecIndex[i++] = u16vec3(20, 22, 23);
 
-	CreateVBO();
-	CreateIBO();
-	BindVBO();
-	BindIBO();
+
 
 }
 

@@ -20,6 +20,12 @@ using namespace std;
 
 // TODO: プログラムに必要な追加ヘッダーをここで参照してください。
 //---------------------
+// OpenCV
+#include <opencv2/opencv.hpp>
+using namespace cv;
+
+
+//---------------------
 // GL
 // Include GLEW
 #include <GL/glew.h>
@@ -35,7 +41,4 @@ using namespace std;
 using namespace glm;
 
 
-//---------------------
-// OpenCV
-//#include <opencv2/opencv.hpp>
 

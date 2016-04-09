@@ -183,6 +183,7 @@ void initCellLife(float dst[], int gy, int gx){
 }
 
 
+
 //-----------------------------------------------------------------------------
 // global variable
 
@@ -271,6 +272,11 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	GlfwControls ctrl(window);
 
+	cv::Mat img = cv::imread("earth512x512.jpg");
+	cv::imshow("Earth",img);
+
+
+
 	// Dark blue background
 	glClearColor(0.0f, 0.0f, 0.4f, 1.0f);
 	glClearDepth(1.0);
@@ -301,10 +307,9 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	//モデル生成
-	//	GModel* model = new GModelSphere(8, 8, 0.45f);
-	GModel* model = new GModelSphere(gy, gx, 0.5f);
+	PureModel* pureModel = new PureModelSphere(gy, gx, 0.5f);
+	GlModel* model = new GlModel(pureModel);
 
-	//	GModel* model = new GModelCube(0.8f);
 
 	//Cell生成 (2bank)
 	float cell[2][gx*gy];
@@ -392,6 +397,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	glfwWindowShouldClose(window) == 0);
 
 
+	delete pureModel;
 	delete model;
 
 	glDeleteTextures(sizeof(textureID) / sizeof(textureID[0]), textureID);
