@@ -137,28 +137,43 @@ void glfw_error_callback_func(int error, const char* description){
 	std::cerr << "GLFW Error: " << description << std::endl;
 }
 
+//常に正の数を返すmod
+#define IMOD(i,j) (((i) % (j)) < 0 ? ((i) % (j)) + ((j) < 0 ? -(j) : (j)) : (i) % (j))
+
+//#define LIFE_BOUND_REPEAT
+
+
 //-----------------------------------------------------------------------------
 //https://ja.wikipedia.org/wiki/%E3%83%A9%E3%82%A4%E3%83%95%E3%82%B2%E3%83%BC%E3%83%A0
-void updateCellLife(const float src[], float dst[], int gy, int gx){
-	for (int y = 0; y < gy; y++){
-		for (int x = 0; x < gx; x++){
+void updateCellLife(const float src[], float dst[], int height, int width){
+	for (int y = 0; y < height; y++){
+		for (int x = 0; x < width; x++){
 			int liveCell = 0;
 			for (int dy = -1; dy <= 1; dy++){
 				for (int dx = -1; dx <= 1; dx++){
 					if (dx == 0 && dy == 0) continue;//自分は数えない
-#if 0					
+					int _x = x+dx;
+					int _y = y+dy;
+
+
+#ifdef LIFE_BOUND_REPEAT					
+					_x = IMOD(_x , width );
+					_y = IMOD(_y, height);
+
+#else
 					//境界
-					if (x + dx < 0)continue;
-					if (x + dx >= gx)continue;
-					if (y + dy < 0)continue;
-					if (y + dy >= gy)continue;
+					if (_x < 0)continue;
+					if (_x >= width)continue;
+					if (_y < 0)continue;
+					if (_y >= height)continue;
 #endif
-					int idx = ((y + dy)*gx + (x + dx)) % (gx*gy);
+
+					int idx = _y*width + _x;
 					if (src[idx] != 0.0) liveCell++;
 				}
 			}
 
-			int idx = (y*gx + x)%(gx*gy);
+			int idx = (y*width + x);
 			//誕生:死んでいるセルに隣接する生きたセルがちょうど3つあれば、次の世代が誕生する。
 			if (src[idx] == 0.0 && liveCell == 3) dst[idx] = 1.0;
 			//生存:生きているセルに隣接する生きたセルが2つか3つならば、次の世代でも生存する。
@@ -174,14 +189,12 @@ void updateCellLife(const float src[], float dst[], int gy, int gx){
 }
 
 //Cell初期化(ランダム)
-void initCellLife(float dst[], int gy, int gx){
-	for (int y = 0; y < gy; y++){
-		for (int x = 0; x < gx; x++){
-			dst[y*gx + x] = (rand() >(RAND_MAX / 2)) ? 1.0f : 0.0f;
+void initCellLife(float dst[], int height, int width){
+	for (int y = 0; y < height; y++){
+		for (int x = 0; x < width; x++){
+			dst[y*width + x] = (rand() >(RAND_MAX / 2)) ? 1.0f : 0.0f;
 		}
 	}
-
-
 }
 
 
@@ -292,29 +305,37 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Create and compile our GLSL program from the shaders
 	GLuint programID = LoadShaders("DefaultVertexShader.vertexshader", "TextureMapFragmentShader.fragmentshader");
 
-	// インスタンス用配列
+
+	//モデル生成
+//	PureModel* pureModel = new PureModelSphere(gy, gx, 0.5f);
+	PureModel* pureModel = new PureModelSphere(32, 32, 0.5f);
+	GlModel* model = new GlModel(pureModel, img);
+
+	//Life Gameのセル数
 #if 0
 	const int gx = 32;	//glid x num
 	const int gy = 32;	//glid y num
 #elif 0
 	const int gx = 64;	//glid x num
 	const int gy = 64;	//glid y num
-#elif 1
+#elif 0
 	const int gx = 128;	//glid x num
 	const int gy = 128;	//glid y num
-#elif 1
+#elif 0
 	const int gx = 256;	//glid x num
 	const int gy = 256;	//glid y num
+#elif 1
+	const int gx = 512;	//glid x num
+	const int gy = 512;	//glid y num
+
 #endif
 
-
-	//モデル生成
-	PureModel* pureModel = new PureModelSphere(gy, gx, 0.5f);
-	GlModel* model = new GlModel(pureModel, img);
-
-
 	//Cell生成 (2bank)
-	float cell[2][gx*gy];
+//	float cell[2][gx*gy];
+	float* cell0 = new float[gx*gy];
+	float* cell1 = new float[gx*gy];
+	float* cell[2] = { cell0, cell1 };
+
 	int cellBank = 0;
 
 	//Cell初期化(ランダム)
@@ -370,9 +391,8 @@ int _tmain(int argc, _TCHAR* argv[])
 			glUniformMatrix4fv(glGetUniformLocation(programID, "mtxMinv"), 1, GL_FALSE, &mtxMinv[0][0]);
 			glUniform3fv(glGetUniformLocation(programID, "lightDirection"), 1, &lightDirection[0]);
 			glUniform3fv(glGetUniformLocation(programID, "eyePosition"), 1, &eyePosition[0]);
-//			glUniform1i(glGetUniformLocation(programID,"tex0"), 0);  // = use GL_TEXTURE0
-			glUniform1i(glGetUniformLocation(programID,"tex0"), 1);  // = use GL_TEXTURE1
 			glUniform1i(glGetUniformLocation(programID,"texImg"), 0);  // = use GL_TEXTURE0
+			glUniform1i(glGetUniformLocation(programID,"tex0"), 1);  // = use GL_TEXTURE1
 
 
 			uploadTexture(textureID[cellBank], &cell[cellBank][0]);
@@ -400,6 +420,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS &&
 	glfwWindowShouldClose(window) == 0);
 
+	delete cell0;
+	delete cell1;
 
 	delete pureModel;
 	delete model;
@@ -407,6 +429,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	glDeleteTextures(sizeof(textureID) / sizeof(textureID[0]), textureID);
 
 	glDeleteProgram(programID);
+
 
 
 	// Close OpenGL window and terminate GLFW
