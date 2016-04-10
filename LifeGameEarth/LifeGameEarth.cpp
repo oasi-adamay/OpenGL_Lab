@@ -327,6 +327,9 @@ int _tmain(int argc, _TCHAR* argv[])
 #elif 1
 	const int gx = 512;	//glid x num
 	const int gy = 512;	//glid y num
+#elif 1
+	const int gx = 1024;	//glid x num
+	const int gy = 1024;	//glid y num
 
 #endif
 
@@ -352,7 +355,8 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 
-	vec3 lightDirection(15.0, 15.0, 15.0);		//平行光源の位置
+//	vec3 lightDirection(15.0, 15.0, 15.0);		//平行光源の位置
+	vec3 lightDirection(3.0, 3.0, 15.0);		//平行光源の位置
 	ctrl.setCameraPosition(vec3(0.0, 0.0, 1.5));	//カメラ初期位置
 
 
@@ -392,7 +396,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			glUniform3fv(glGetUniformLocation(programID, "lightDirection"), 1, &lightDirection[0]);
 			glUniform3fv(glGetUniformLocation(programID, "eyePosition"), 1, &eyePosition[0]);
 			glUniform1i(glGetUniformLocation(programID,"texImg"), 0);  // = use GL_TEXTURE0
-			glUniform1i(glGetUniformLocation(programID,"tex0"), 1);  // = use GL_TEXTURE1
+			glUniform1i(glGetUniformLocation(programID,"texCell"), 1);  // = use GL_TEXTURE1
 
 
 			uploadTexture(textureID[cellBank], &cell[cellBank][0]);

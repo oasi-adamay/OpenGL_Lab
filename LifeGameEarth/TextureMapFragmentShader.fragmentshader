@@ -15,7 +15,7 @@ out vec4 color;
 uniform   mat4 mtxMinv;
 uniform   vec3 lightDirection;
 uniform   vec3 eyePosition;
-uniform	  sampler2D tex0;
+uniform	  sampler2D texCell;
 uniform	  sampler2D texImg;
 
 void main()
@@ -26,21 +26,18 @@ void main()
 	vec3  invEye   = normalize(mtxMinv * vec4(eyePosition, 0.0)).xyz;
 	vec3  halfLE   = normalize(invLight + invEye);
 
-	float diffuse  = clamp(dot(normVec, invLight), 0.2, 1.0);
+	float cell     = texture (texCell, vTexCoord).r;
+	cell = cell /2.0 + 0.5;
+//	float diffuse  = clamp(dot(normVec, invLight), 0.5, 1.0);
+	float diffuse  = clamp(dot(normVec, invLight)*cell, 0.2, 1.0);
 	float specular = pow(clamp(dot(normVec, halfLE), 0.0, 1.0), 10.0);
 
-	float state   = texture (tex0, vTexCoord).r;
-	state = state/2.0 + 0.5;
 
 	vec4  img = vec4(texture (texImg, vTexCoord).rgb,1.0);
 
 	vec4  light    = vec4(vec3(diffuse), 1.0) + vec4(vec3(specular), 1.0);
 
-
 //	color = vColor * light;
-//	color = vec4(state,state,state,1.0)*vColor * light;
-//	color = vec4(state,state,state,1.0)*vColor;
-	color = vec4(state,state,state,1.0)*img;
-//	color = img * light;
+	color = img * light;
 
 }
