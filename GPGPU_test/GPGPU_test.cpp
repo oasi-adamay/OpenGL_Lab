@@ -195,7 +195,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		for (int y = 0; y < height; y++){
 			for (int x = 0; x < width; x++){
-				imgSrc.at<float>(y,x) = y*100.0 + x;
+				imgSrc.at<float>(y,x) = y*100.0f + x;
 			}
 		}
 	}
@@ -361,9 +361,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	//verify
+	int errNum = 0;
 	{
 		//verify
-		int errNum = 0;
 		int width = imgSrc.cols;
 		int height = imgSrc.rows;
 		for (int y = 0; y < height; y++){
@@ -388,6 +388,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 
-	return 0;
+	return errNum;
 }
 
