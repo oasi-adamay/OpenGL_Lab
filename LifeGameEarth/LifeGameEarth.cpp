@@ -328,12 +328,23 @@ int _tmain(int argc, _TCHAR* argv[])
 	glDepthFunc(GL_LEQUAL);
 	glEnable(GL_CULL_FACE);
 
+	//Program生成
+	enum E_PID{
+		PID_Draw,
+#ifdef USE_GPGPU
+		PID_LifeGameUpdate,
+#endif
+		PID_SIZEOF,
+	};
+
+	GLuint programID[E_PID::PID_SIZEOF];
+
 	// Create and compile our GLSL program from the shaders
-	GLuint programID = LoadShaders("DefaultVertexShader.vertexshader", "TextureMapFragmentShader.fragmentshader");
+	programID[E_PID::PID_Draw] = LoadShaders("DefaultVertexShader.vertexshader", "TextureMapFragmentShader.fragmentshader");
 
 #ifdef USE_GPGPU
 	// Create and compile our GLSL program from the shaders
-	GLuint programLifeGameID = LoadShaders("LifeGame.vertexshader", "LifeGameUpdate.fragmentshader");
+	programID[E_PID::PID_LifeGameUpdate] = LoadShaders("LifeGame.vertexshader", "LifeGameUpdate.fragmentshader");
 #endif
 
 
@@ -381,13 +392,13 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	//texture生成
-	enum E_TextureID{
-		CELL_STATE0,
-		CELL_STATE1,
-		SIZEOF,
+	enum E_TID{
+		TID_CELL_STATE0,
+		TID_CELL_STATE1,
+		TID_SIZEOF,
 	};
 
-	GLuint textureID[E_TextureID::SIZEOF];
+	GLuint textureID[E_TID::TID_SIZEOF];
 
 	// ---- ---- ---- ---- ---- ---- ---- ----
 	// CreateTexture
@@ -420,8 +431,10 @@ int _tmain(int argc, _TCHAR* argv[])
 		vec3 eyePosition = ctrl.getCameraPosition();
 
 		{
+			const GLuint pid = programID[E_PID::PID_Draw];
+			
 			// Use our shader
-			glUseProgram(programID);
+			glUseProgram(pid);
 
 
 			// Compute the MVP matrix from keyboard and mouse input
@@ -434,13 +447,13 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 			// Send our transformation to the currently bound shader, 
-			glUniformMatrix4fv(glGetUniformLocation(programID, "mtxMVP"), 1, GL_FALSE, &mtxMVP[0][0]);
-			glUniformMatrix4fv(glGetUniformLocation(programID, "mtxM"), 1, GL_FALSE, &mtxM[0][0]);
-			glUniformMatrix4fv(glGetUniformLocation(programID, "mtxMinv"), 1, GL_FALSE, &mtxMinv[0][0]);
-			glUniform3fv(glGetUniformLocation(programID, "lightDirection"), 1, &lightDirection[0]);
-			glUniform3fv(glGetUniformLocation(programID, "eyePosition"), 1, &eyePosition[0]);
-			glUniform1i(glGetUniformLocation(programID,"texImg"), 0);  // = use GL_TEXTURE0
-			glUniform1i(glGetUniformLocation(programID,"texCell"), 1);  // = use GL_TEXTURE1
+			glUniformMatrix4fv(glGetUniformLocation(pid, "mtxMVP"), 1, GL_FALSE, &mtxMVP[0][0]);
+			glUniformMatrix4fv(glGetUniformLocation(pid, "mtxM"), 1, GL_FALSE, &mtxM[0][0]);
+			glUniformMatrix4fv(glGetUniformLocation(pid, "mtxMinv"), 1, GL_FALSE, &mtxMinv[0][0]);
+			glUniform3fv(glGetUniformLocation(pid, "lightDirection"), 1, &lightDirection[0]);
+			glUniform3fv(glGetUniformLocation(pid, "eyePosition"), 1, &eyePosition[0]);
+			glUniform1i(glGetUniformLocation(pid, "texImg"), 0);  // = use GL_TEXTURE0
+			glUniform1i(glGetUniformLocation(pid, "texCell"), 1);  // = use GL_TEXTURE1
 
 			//set viewport (client windows size)
 			glViewport(0, 0, width, height);
@@ -462,10 +475,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		//---------------------------------
 		//Execute GPGPU
 		{
+			const GLuint pid = programID[E_PID::PID_LifeGameUpdate];
+
 			const int width = gx;
 			const int height = gy;
 
-			glUseProgram(programLifeGameID);
+			glUseProgram(pid);
 
 			// FBO identifier
 			GLuint fbo = 0;
@@ -502,7 +517,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 			// Set VertexAttribute
 
-			GLint attrLoc = glGetAttribLocation(programLifeGameID,"position");
+			GLint attrLoc = glGetAttribLocation(pid, "position");
 			glEnableVertexAttribArray(attrLoc);	//enable attribute Location
 			glVertexAttribPointer(
 				attrLoc,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
@@ -519,8 +534,8 @@ int _tmain(int argc, _TCHAR* argv[])
 			GLuint texDst = textureID[cellBank^1];
 			glActiveTexture(GL_TEXTURE0 + textureUnit);
 			glBindTexture(GL_TEXTURE_2D, texSrc);
-			glUniform1i(glGetUniformLocation(programLifeGameID, "texSrc"), textureUnit);
-			glUniform2f(glGetUniformLocation(programLifeGameID, "texSrcSize"), (float)width, (float)height);
+			glUniform1i(glGetUniformLocation(pid, "texSrc"), textureUnit);
+			glUniform2f(glGetUniformLocation(pid, "texSrcSize"), (float)width, (float)height);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texDst, 0);
 
 			//Viewport
@@ -585,10 +600,11 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	glDeleteTextures(sizeof(textureID) / sizeof(textureID[0]), textureID);
 
-	glDeleteProgram(programID);
-#ifdef USE_GPGPU
-	glDeleteProgram(programLifeGameID);
-#endif
+
+	// Delete program
+	for (int i = 0; i < E_PID::PID_SIZEOF; i++)	{
+		glDeleteProgram(programID[i]);
+	}
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
