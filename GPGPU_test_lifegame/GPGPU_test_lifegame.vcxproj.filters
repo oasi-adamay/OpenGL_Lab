@@ -44,10 +44,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-    <None Include="GpGpuFragmentShader.fragmentshader">
+    <None Include="LifeGameUpdate.fragmentshader">
       <Filter>Shader</Filter>
     </None>
-    <None Include="GpGpuVertexShader.vertexshader">
+    <None Include="LifeGame.vertexshader">
       <Filter>Shader</Filter>
     </None>
   </ItemGroup>

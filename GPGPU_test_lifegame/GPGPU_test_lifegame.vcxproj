@@ -161,8 +161,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="GpGpuFragmentShader.fragmentshader" />
-    <None Include="GpGpuVertexShader.vertexshader" />
+    <None Include="LifeGameUpdate.fragmentshader" />
+    <None Include="LifeGame.vertexshader" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

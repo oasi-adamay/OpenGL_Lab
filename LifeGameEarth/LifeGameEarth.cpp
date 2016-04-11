@@ -7,7 +7,7 @@
 #pragma comment (lib, "opengl32.lib")
 #pragma comment (lib, "glew32.lib")
 #pragma comment (lib, "glfw3dll.lib")
-#pragma comment (lib, "freeglut.lib")
+//#pragma comment (lib, "freeglut.lib")
 
 
 #include "../common/controls.hpp"
@@ -17,6 +17,8 @@
 #include "Model.h"
 
 #define USE_GPGPU
+#define LIFE_BOUND_REPEAT
+
 
 
 
@@ -165,7 +167,6 @@ void glfw_error_callback_func(int error, const char* description){
 //常に正の数を返すmod
 #define IMOD(i,j) (((i) % (j)) < 0 ? ((i) % (j)) + ((j) < 0 ? -(j) : (j)) : (i) % (j))
 
-//#define LIFE_BOUND_REPEAT
 
 
 //-----------------------------------------------------------------------------
@@ -332,14 +333,13 @@ int _tmain(int argc, _TCHAR* argv[])
 
 #ifdef USE_GPGPU
 	// Create and compile our GLSL program from the shaders
-	GLuint programLifeGameID = LoadShaders("GpGpuVertexShader.vertexshader", "GpGpuFragmentShader.fragmentshader");
+	GLuint programLifeGameID = LoadShaders("LifeGame.vertexshader", "LifeGameUpdate.fragmentshader");
 #endif
 
 
 
 
 	//モデル生成
-//	PureModel* pureModel = new PureModelSphere(gy, gx, 0.5f);
 	PureModel* pureModel = new PureModelSphere(32, 32, 0.5f);
 	GlModel* model = new GlModel(pureModel, img);
 
@@ -359,7 +359,7 @@ int _tmain(int argc, _TCHAR* argv[])
 #elif 0
 	const int gx = 256;	//glid x num
 	const int gy = 256;	//glid y num
-#elif 0
+#elif 1
 	const int gx = 512;	//glid x num
 	const int gy = 512;	//glid y num
 #elif 1

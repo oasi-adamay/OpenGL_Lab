@@ -178,7 +178,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 		// Create and compile our GLSL program from the shaders
-		GLuint programID = LoadShaders("GpGpuVertexShader.vertexshader", "GpGpuFragmentShader.fragmentshader");
+		GLuint programID = LoadShaders("LifeGame.vertexshader", "LifeGameUpdate.fragmentshader");
 
 		// FBO identifier
 		GLuint fbo = 0;

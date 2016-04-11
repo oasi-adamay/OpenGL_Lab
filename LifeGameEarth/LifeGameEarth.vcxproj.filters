@@ -77,10 +77,10 @@
     <None Include="TextureMapFragmentShader.fragmentshader">
       <Filter>Shader</Filter>
     </None>
-    <None Include="GpGpuVertexShader.vertexshader">
+    <None Include="LifeGame.vertexshader">
       <Filter>Shader</Filter>
     </None>
-    <None Include="GpGpuFragmentShader.fragmentshader">
+    <None Include="LifeGameUpdate.fragmentshader">
       <Filter>Shader</Filter>
     </None>
   </ItemGroup>

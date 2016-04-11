@@ -37,7 +37,7 @@ GLuint LoadShaders(const char * vertex_file_path, const char * fragment_file_pat
 		VertexShaderStream.close();
 	}
 	else{
-		cout << "Impossible to open " << vertex_file_path << endl;
+		cout << "Impossible to open:" << vertex_file_path << endl;
 		assert(0);
 		//		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", vertex_file_path);
 		//		getchar();
@@ -54,7 +54,7 @@ GLuint LoadShaders(const char * vertex_file_path, const char * fragment_file_pat
 		FragmentShaderStream.close();
 	}
 	else{
-		cout << "Impossible to open " << vertex_file_path << endl;
+		cout << "Impossible to open:" << fragment_file_path << endl;
 		assert(0);
 		//		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", vertex_file_path);
 		//		getchar();
