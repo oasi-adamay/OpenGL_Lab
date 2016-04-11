@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include "HookCoutCerr.hpp"
 
 //Lib 
 #pragma comment (lib, "opengl32.lib")
@@ -336,6 +337,9 @@ GLFWwindow* window;
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	HookCoutCerr hoge;
+
+
 	const int width = 1024;
 	const int height = 768;
 

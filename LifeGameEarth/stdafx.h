@@ -19,6 +19,8 @@ using namespace std;
 
 
 // TODO: プログラムに必要な追加ヘッダーをここで参照してください。
+#include <windows.h>
+
 //---------------------
 // OpenCV
 #include <opencv2/opencv.hpp>

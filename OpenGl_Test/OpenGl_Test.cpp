@@ -2,11 +2,13 @@
 //
 
 #include "stdafx.h"
+#include "HookCoutCerr.hpp"
 
 //Lib 
 #pragma comment (lib, "opengl32.lib")
 #pragma comment (lib, "glew32.lib")
 #pragma comment (lib, "glfw3dll.lib")
+
 
 
 //-----------------------------------------------------------------------------
@@ -23,6 +25,8 @@ GLFWwindow* window;
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	HookCoutCerr hoge;
+
 	const int width = 1024;
 	const int height = 768;
 
@@ -96,14 +100,13 @@ int _tmain(int argc, _TCHAR* argv[])
 		cout << "GL_RENDERER:" << glGetString(GL_RENDERER) << endl;
 		cout << "GL_VERSION:" << glGetString(GL_VERSION) << endl;
 		cout << "GL_SHADING_LANGUAGE_VERSION:" << glGetString(GL_SHADING_LANGUAGE_VERSION) << endl;
-
 	}
 
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 
-
+	cin.get();
 
 	return 0;
 }
