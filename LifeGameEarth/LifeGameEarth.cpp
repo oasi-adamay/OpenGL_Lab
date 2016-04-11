@@ -16,6 +16,7 @@
 
 #include "Model.h"
 
+#define USE_GPGPU
 
 
 
@@ -81,10 +82,14 @@ int createTexture(
 	// (set texture parameters here)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+#ifdef LIFE_BOUND_REPEAT					
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+#else
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+#endif
 
 	//create the texture
 	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, 0);
@@ -123,6 +128,26 @@ int uploadTexture(
 
 
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, data);
+
+	return 0;
+}
+
+//download from framebuffer
+int downloadFrameBuffer(
+	GLint width,
+	GLint height,
+	void* data,		///<src data
+	const GLenum format = GL_RED,	///<format
+	const GLenum type = GL_FLOAT		///<type
+	)
+{
+	//download from framebuffer
+
+	// ReadBuffer
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+	// ReadPixels
+	glReadPixels(0, 0, width, height, format, type, data);
 
 	return 0;
 }
@@ -305,6 +330,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Create and compile our GLSL program from the shaders
 	GLuint programID = LoadShaders("DefaultVertexShader.vertexshader", "TextureMapFragmentShader.fragmentshader");
 
+#ifdef USE_GPGPU
+	// Create and compile our GLSL program from the shaders
+	GLuint programLifeGameID = LoadShaders("GpGpuVertexShader.vertexshader", "GpGpuFragmentShader.fragmentshader");
+#endif
+
+
+
 
 	//モデル生成
 //	PureModel* pureModel = new PureModelSphere(gy, gx, 0.5f);
@@ -313,6 +345,9 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	//Life Gameのセル数
 #if 0
+	const int gx = 8;	//glid x num
+	const int gy = 8;	//glid y num
+#elif 0
 	const int gx = 32;	//glid x num
 	const int gy = 32;	//glid y num
 #elif 0
@@ -324,7 +359,7 @@ int _tmain(int argc, _TCHAR* argv[])
 #elif 0
 	const int gx = 256;	//glid x num
 	const int gy = 256;	//glid y num
-#elif 1
+#elif 0
 	const int gx = 512;	//glid x num
 	const int gy = 512;	//glid y num
 #elif 1
@@ -346,12 +381,22 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	//texture生成
-	unsigned int textureID[2];
+	enum E_TextureID{
+		CELL_STATE0,
+		CELL_STATE1,
+		SIZEOF,
+	};
+
+	GLuint textureID[E_TextureID::SIZEOF];
+
 	// ---- ---- ---- ---- ---- ---- ---- ----
 	// CreateTexture
 	glGenTextures(sizeof(textureID) / sizeof(textureID[0]), textureID); // create (reference to) a new texture
 	createTexture(textureID[0], gx, gy, GL_R32F);
 	createTexture(textureID[1], gx, gy, GL_R32F);
+
+	uploadTexture(textureID[cellBank], &cell[cellBank][0]);
+
 
 
 
@@ -372,13 +417,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		glClearDepth(1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
-		// Use our shader
-		glUseProgram(programID);
-
 		vec3 eyePosition = ctrl.getCameraPosition();
 
 		{
+			// Use our shader
+			glUseProgram(programID);
+
 
 			// Compute the MVP matrix from keyboard and mouse input
 			glm::mat4 mtxP = ctrl.getProjectionMatrix();
@@ -398,22 +442,131 @@ int _tmain(int argc, _TCHAR* argv[])
 			glUniform1i(glGetUniformLocation(programID,"texImg"), 0);  // = use GL_TEXTURE0
 			glUniform1i(glGetUniformLocation(programID,"texCell"), 1);  // = use GL_TEXTURE1
 
+			//set viewport (client windows size)
+			glViewport(0, 0, width, height);
 
-			uploadTexture(textureID[cellBank], &cell[cellBank][0]);
+			glActiveTexture(GL_TEXTURE1);	// = use GL_TEXTURE1
+			glBindTexture(GL_TEXTURE_2D, textureID[cellBank]);
 			model->Draw();
+
+			glBindTexture(GL_TEXTURE_2D, 0);	//un-bind
+
+
 //			model->DrawPoints();
+
+
 
 		}
 
+#ifdef USE_GPGPU
+		//---------------------------------
+		//Execute GPGPU
+		{
+			const int width = gx;
+			const int height = gy;
+
+			glUseProgram(programLifeGameID);
+
+			// FBO identifier
+			GLuint fbo = 0;
+
+			//---------------------------------
+			// FBO
+			// create FBO (off-screen framebuffer)
+			glGenFramebuffers(1, &fbo);
+
+			// bind offscreen framebuffer (that is, skip the window-specific render target)
+			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+			GLuint vao = 0;
+			GLuint vbo = 0;
+
+			// [-1, 1] の正方形
+			static GLfloat position[][2] = {
+				{ -1.0f, -1.0f },
+				{ 1.0f, -1.0f },
+				{ 1.0f, 1.0f },
+				{ -1.0f, 1.0f }
+			};
+
+			// create vao&vbo
+			glGenVertexArrays(1, &vao);
+			glGenBuffers(1, &vbo);
+
+			// bind vao & vbo
+			glBindVertexArray(vao);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+			// upload vbo data
+			glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
+
+			// Set VertexAttribute
+
+			GLint attrLoc = glGetAttribLocation(programLifeGameID,"position");
+			glEnableVertexAttribArray(attrLoc);	//enable attribute Location
+			glVertexAttribPointer(
+				attrLoc,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
+				2,					// size	(Specifies the number of components) x,y
+				GL_FLOAT,			// type
+				GL_FALSE,			// normalized?
+				0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
+				(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
+				);
+
+			//Bind Texture & Fbo
+			const int textureUnit = 0;			///@@@@@
+			GLuint texSrc = textureID[cellBank];
+			GLuint texDst = textureID[cellBank^1];
+			glActiveTexture(GL_TEXTURE0 + textureUnit);
+			glBindTexture(GL_TEXTURE_2D, texSrc);
+			glUniform1i(glGetUniformLocation(programLifeGameID, "texSrc"), textureUnit);
+			glUniform2f(glGetUniformLocation(programLifeGameID, "texSrcSize"), (float)width, (float)height);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texDst, 0);
+
+			//Viewport
+			glViewport(0, 0, width, height);
+
+			//Render!!
+			glDrawArrays(GL_TRIANGLE_FAN, 0, (int)(sizeof(position) / sizeof(position[0])));
+
+			glFlush();
+#if 0
+			downloadFrameBuffer(width, height, &cell[cellBank ^ 1][0]);
+			{
+				float* ptr = &cell[cellBank ^ 1][0];
+				for (int y = 0; y < height; y++){
+					for (int x = 0; x < width; x++){
+						int idx = y*width + x;
+						cout << ptr[idx] << ",";
+					}
+					cout << endl;
+				}
+			}
+#endif
+			// delete vao&vbo
+			glBindVertexArray(0);
+			glDeleteVertexArrays(1, &vao);
+			glDeleteBuffers(1, &vbo);
+
+			//clean up
+			glDeleteFramebuffers(1, &fbo);
+
+			//togle cell bank
+			cellBank = cellBank ^ 1;
+
+		}
+#else
 		if (framecount % 1000){
 			//update cell state
 			updateCellLife(&cell[cellBank][0], &cell[cellBank ^ 1][0], gy, gx);
 			cellBank = cellBank ^ 1;
+			uploadTexture(textureID[cellBank], &cell[cellBank][0]);
+
 		}
 		else{
 			initCellLife(&cell[cellBank][0], gy, gx);
 		}
-
+#endif
 
 
 		// Swap buffers
@@ -433,8 +586,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	glDeleteTextures(sizeof(textureID) / sizeof(textureID[0]), textureID);
 
 	glDeleteProgram(programID);
-
-
+#ifdef USE_GPGPU
+	glDeleteProgram(programLifeGameID);
+#endif
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
