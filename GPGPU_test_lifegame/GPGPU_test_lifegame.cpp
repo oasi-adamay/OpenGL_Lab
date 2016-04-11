@@ -210,24 +210,24 @@ int _tmain(int argc, _TCHAR* argv[])
 			glGenTextures(sizeof(textureID) / sizeof(textureID[0]), textureID); // create (reference to) a new texture
 
 			for (int i = 0; i < sizeof(textureID) / sizeof(textureID[0]); i++){
-				glBindTexture(GL_TEXTURE_RECTANGLE, textureID[i]);
+				glBindTexture(GL_TEXTURE_2D, textureID[i]);
 				// (set texture parameters here)
-				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-//				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-//				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+//				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+//				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 #ifdef LIFE_BOUND_REPEAT					
-				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, GL_REPEAT);
-				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, GL_REPEAT);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 #else
-				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-				glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 #endif
 				
 				//create the texture
-				glTexImage2D(GL_TEXTURE_RECTANGLE, 0, internalFormat, width, height, 0, format, type, 0);
+				glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, 0);
 
-				glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+				glBindTexture(GL_TEXTURE_2D, 0);
 			}
 
 		}
@@ -238,9 +238,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			GLenum type = GL_FLOAT;				//float
 			void* data = imgSrc.data;
 
-			glBindTexture(GL_TEXTURE_RECTANGLE, textureID[E_TextureID::SRC]);
-			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, data);
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+			glBindTexture(GL_TEXTURE_2D, textureID[E_TextureID::SRC]);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, data);
+			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 
 
@@ -284,9 +284,10 @@ int _tmain(int argc, _TCHAR* argv[])
 			//Bind Texture & Fbo
 			const int textureUnit = 0;
 			glActiveTexture(GL_TEXTURE0 + textureUnit);
-			glBindTexture(GL_TEXTURE_RECTANGLE, textureID[E_TextureID::SRC]);
+			glBindTexture(GL_TEXTURE_2D, textureID[E_TextureID::SRC]);
 			glUniform1i(glGetUniformLocation(programID, "texSrc"), textureUnit);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE, textureID[E_TextureID::DST], 0);
+			glUniform2f(glGetUniformLocation(programID, "texSrcSize"), (float)width, (float)height);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureID[E_TextureID::DST], 0);
 
 			//Viewport
 			glViewport(0, 0, width, height);
@@ -369,6 +370,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
+
+	cout << "Hit return key" << endl;
+	cin.get();
+
 
 	return errNum;
 }
