@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="ソース ファイル\common">
+      <UniqueIdentifier>{654b0de6-2b43-4292-bf29-0f50b3193ee3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shader">
+      <UniqueIdentifier>{e6b5c854-531a-4451-9dd5-3b7acccc08fd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -32,8 +38,17 @@
     <ClCompile Include="GPGPU_test.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="..\common\shader.cpp">
+      <Filter>ソース ファイル\common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="GpGpuFragmentShader.fragmentshader">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="GpGpuVertexShader.vertexshader">
+      <Filter>Shader</Filter>
+    </None>
   </ItemGroup>
 </Project>
