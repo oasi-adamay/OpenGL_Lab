@@ -16,7 +16,7 @@
 
 #include "Model.h"
 
-#define USE_GPGPU
+#define USE_LIFEGAME_GPGPU		//GPUによってLifeGameの更新を行う。転送がないので高速
 #define LIFE_BOUND_REPEAT
 
 
@@ -154,8 +154,109 @@ int downloadFrameBuffer(
 	return 0;
 }
 
+void executeGpGpuProcess(
+	const GLuint pid,			//progmra ID
+	GLuint texSrc,					//src texture ID
+	GLuint texDst					//dst texture ID
+)
+{
+	int width;
+	int height;
+
+	//get texture size
+	{
+		glBindTexture(GL_TEXTURE_2D, texDst);
+
+		glGetTexLevelParameteriv(
+			GL_TEXTURE_2D, 0,
+			GL_TEXTURE_WIDTH, &width
+			);
+
+		glGetTexLevelParameteriv(
+			GL_TEXTURE_2D, 0,
+			GL_TEXTURE_WIDTH, &height
+			);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
 
+
+	glUseProgram(pid);
+
+	// FBO identifier
+	GLuint fbo = 0;
+
+	//---------------------------------
+	// FBO
+	// create FBO (off-screen framebuffer)
+	glGenFramebuffers(1, &fbo);
+
+	// bind offscreen framebuffer (that is, skip the window-specific render target)
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+	GLuint vao = 0;
+	GLuint vbo = 0;
+
+	// [-1, 1] の正方形
+	static GLfloat position[][2] = {
+		{ -1.0f, -1.0f },
+		{ 1.0f, -1.0f },
+		{ 1.0f, 1.0f },
+		{ -1.0f, 1.0f }
+	};
+
+	// create vao&vbo
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+
+	// bind vao & vbo
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+	// upload vbo data
+	glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
+
+	// Set VertexAttribute
+
+	GLint attrLoc = glGetAttribLocation(pid, "position");
+	glEnableVertexAttribArray(attrLoc);	//enable attribute Location
+	glVertexAttribPointer(
+		attrLoc,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
+		2,					// size	(Specifies the number of components) x,y
+		GL_FLOAT,			// type
+		GL_FALSE,			// normalized?
+		0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
+		(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
+		);
+
+	//Bind Texture & Fbo
+	if (texSrc){
+		const int textureUnit = 0;			///@@@@@
+		glActiveTexture(GL_TEXTURE0 + textureUnit);
+		glBindTexture(GL_TEXTURE_2D, texSrc);
+		glUniform1i(glGetUniformLocation(pid, "texSrc"), textureUnit);
+		glUniform2f(glGetUniformLocation(pid, "texSrcSize"), (float)width, (float)height);
+	}
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texDst, 0);
+
+	//Viewport
+	glViewport(0, 0, width, height);
+
+	//Render!!
+	glDrawArrays(GL_TRIANGLE_FAN, 0, (int)(sizeof(position) / sizeof(position[0])));
+
+	glFlush();
+
+	// delete vao&vbo
+	glBindVertexArray(0);
+	glDeleteVertexArrays(1, &vao);
+	glDeleteBuffers(1, &vbo);
+
+	//clean up
+	glDeleteFramebuffers(1, &fbo);
+}
 
 
 //-----------------------------------------------------------------------------
@@ -331,7 +432,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	//Program生成
 	enum E_PID{
 		PID_Draw,
-#ifdef USE_GPGPU
+#ifdef USE_LIFEGAME_GPGPU
+		PID_LifeGameInit,
 		PID_LifeGameUpdate,
 #endif
 		PID_SIZEOF,
@@ -342,8 +444,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Create and compile our GLSL program from the shaders
 	programID[E_PID::PID_Draw] = LoadShaders("DefaultVertexShader.vertexshader", "TextureMapFragmentShader.fragmentshader");
 
-#ifdef USE_GPGPU
+#ifdef USE_LIFEGAME_GPGPU
 	// Create and compile our GLSL program from the shaders
+	programID[E_PID::PID_LifeGameInit] = LoadShaders("LifeGame.vertexshader", "LifeGameInit.fragmentshader");
 	programID[E_PID::PID_LifeGameUpdate] = LoadShaders("LifeGame.vertexshader", "LifeGameUpdate.fragmentshader");
 #endif
 
@@ -379,17 +482,19 @@ int _tmain(int argc, _TCHAR* argv[])
 
 #endif
 
+	int cellBank = 0;
+
+#ifndef USE_LIFEGAME_GPGPU
 	//Cell生成 (2bank)
 //	float cell[2][gx*gy];
 	float* cell0 = new float[gx*gy];
 	float* cell1 = new float[gx*gy];
 	float* cell[2] = { cell0, cell1 };
 
-	int cellBank = 0;
 
 	//Cell初期化(ランダム)
 	initCellLife(&cell[cellBank][0], gy, gx);
-
+#endif
 
 	//texture生成
 	enum E_TID{
@@ -406,8 +511,11 @@ int _tmain(int argc, _TCHAR* argv[])
 	createTexture(textureID[0], gx, gy, GL_R32F);
 	createTexture(textureID[1], gx, gy, GL_R32F);
 
+#ifdef USE_LIFEGAME_GPGPU
+	executeGpGpuProcess(programID[E_PID::PID_LifeGameInit], 0, textureID[cellBank]);
+#else
 	uploadTexture(textureID[cellBank], &cell[cellBank][0]);
-
+#endif
 
 
 
@@ -441,7 +549,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			glm::mat4 mtxP = ctrl.getProjectionMatrix();
 			glm::mat4 mtxV = ctrl.getViewMatrix();
 //			glm::mat4 mtxM = glm::mat4(1.0);
-			mtxM = glm::rotate(mtxM, float(1.0/360.0f*3.14), vec3(0.0, 1.0, 0.0));	//rotate Y axis
+			mtxM = glm::rotate(mtxM, float(0.05/180.0f*3.14), vec3(0.0, 1.0, 0.0));	//rotate Y axis
 			glm::mat4 mtxMVP = mtxP * mtxV * mtxM;
 			glm::mat4 mtxMinv = inverse(mtxM);
 
@@ -471,104 +579,19 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		}
 
-#ifdef USE_GPGPU
+#ifdef USE_LIFEGAME_GPGPU
 		//---------------------------------
 		//Execute GPGPU
-		{
+		if (framecount % 1000){
 			const GLuint pid = programID[E_PID::PID_LifeGameUpdate];
-
-			const int width = gx;
-			const int height = gy;
-
-			glUseProgram(pid);
-
-			// FBO identifier
-			GLuint fbo = 0;
-
-			//---------------------------------
-			// FBO
-			// create FBO (off-screen framebuffer)
-			glGenFramebuffers(1, &fbo);
-
-			// bind offscreen framebuffer (that is, skip the window-specific render target)
-			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-			GLuint vao = 0;
-			GLuint vbo = 0;
-
-			// [-1, 1] の正方形
-			static GLfloat position[][2] = {
-				{ -1.0f, -1.0f },
-				{ 1.0f, -1.0f },
-				{ 1.0f, 1.0f },
-				{ -1.0f, 1.0f }
-			};
-
-			// create vao&vbo
-			glGenVertexArrays(1, &vao);
-			glGenBuffers(1, &vbo);
-
-			// bind vao & vbo
-			glBindVertexArray(vao);
-			glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-			// upload vbo data
-			glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
-
-			// Set VertexAttribute
-
-			GLint attrLoc = glGetAttribLocation(pid, "position");
-			glEnableVertexAttribArray(attrLoc);	//enable attribute Location
-			glVertexAttribPointer(
-				attrLoc,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
-				2,					// size	(Specifies the number of components) x,y
-				GL_FLOAT,			// type
-				GL_FALSE,			// normalized?
-				0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
-				(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
-				);
-
-			//Bind Texture & Fbo
-			const int textureUnit = 0;			///@@@@@
 			GLuint texSrc = textureID[cellBank];
-			GLuint texDst = textureID[cellBank^1];
-			glActiveTexture(GL_TEXTURE0 + textureUnit);
-			glBindTexture(GL_TEXTURE_2D, texSrc);
-			glUniform1i(glGetUniformLocation(pid, "texSrc"), textureUnit);
-			glUniform2f(glGetUniformLocation(pid, "texSrcSize"), (float)width, (float)height);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texDst, 0);
-
-			//Viewport
-			glViewport(0, 0, width, height);
-
-			//Render!!
-			glDrawArrays(GL_TRIANGLE_FAN, 0, (int)(sizeof(position) / sizeof(position[0])));
-
-			glFlush();
-#if 0
-			downloadFrameBuffer(width, height, &cell[cellBank ^ 1][0]);
-			{
-				float* ptr = &cell[cellBank ^ 1][0];
-				for (int y = 0; y < height; y++){
-					for (int x = 0; x < width; x++){
-						int idx = y*width + x;
-						cout << ptr[idx] << ",";
-					}
-					cout << endl;
-				}
-			}
-#endif
-			// delete vao&vbo
-			glBindVertexArray(0);
-			glDeleteVertexArrays(1, &vao);
-			glDeleteBuffers(1, &vbo);
-
-			//clean up
-			glDeleteFramebuffers(1, &fbo);
-
+			GLuint texDst = textureID[cellBank ^ 1];
+			executeGpGpuProcess(pid, texSrc, texDst);
 			//togle cell bank
 			cellBank = cellBank ^ 1;
-
+		}
+		else{
+			executeGpGpuProcess(programID[E_PID::PID_LifeGameInit], 0, textureID[cellBank]);
 		}
 #else
 		if (framecount % 1000){
@@ -592,13 +615,15 @@ int _tmain(int argc, _TCHAR* argv[])
 	while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS &&
 	glfwWindowShouldClose(window) == 0);
 
-	delete cell0;
-	delete cell1;
-
 	delete pureModel;
 	delete model;
 
 	glDeleteTextures(sizeof(textureID) / sizeof(textureID[0]), textureID);
+
+#ifndef USE_LIFEGAME_GPGPU
+	delete cell0;
+	delete cell1;
+#endif
 
 
 	// Delete program
