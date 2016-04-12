@@ -156,10 +156,11 @@ int downloadFrameBuffer(
 }
 
 void executeGpGpuProcess(
-	const GLuint pid,			//progmra ID
+	const GLuint pid,				//progmra ID
+	GLuint _fbo,					//FBO 0の場合、内部で生成、破棄 後でreadPixelで読みだせない
 	GLuint texSrc,					//src texture ID
 	GLuint texDst					//dst texture ID
-)
+	)
 {
 	int width;
 	int height;
@@ -175,7 +176,7 @@ void executeGpGpuProcess(
 
 		glGetTexLevelParameteriv(
 			GL_TEXTURE_2D, 0,
-			GL_TEXTURE_WIDTH, &height
+			GL_TEXTURE_HEIGHT, &height
 			);
 
 		glBindTexture(GL_TEXTURE_2D, 0);
@@ -186,12 +187,12 @@ void executeGpGpuProcess(
 	glUseProgram(pid);
 
 	// FBO identifier
-	GLuint fbo = 0;
+	GLuint fbo = _fbo;
 
 	//---------------------------------
 	// FBO
 	// create FBO (off-screen framebuffer)
-	glGenFramebuffers(1, &fbo);
+	if (_fbo == 0)	glGenFramebuffers(1, &fbo);
 
 	// bind offscreen framebuffer (that is, skip the window-specific render target)
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -256,7 +257,8 @@ void executeGpGpuProcess(
 	glDeleteBuffers(1, &vbo);
 
 	//clean up
-	glDeleteFramebuffers(1, &fbo);
+	if (_fbo == 0)	glDeleteFramebuffers(1, &fbo);
+
 }
 
 
@@ -516,7 +518,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	createTexture(textureID[1], gx, gy, GL_R32F);
 
 #ifdef USE_LIFEGAME_GPGPU
-	executeGpGpuProcess(programID[E_PID::PID_LifeGameInit], 0, textureID[cellBank]);
+	executeGpGpuProcess(programID[E_PID::PID_LifeGameInit], 0,0, textureID[cellBank]);
 #else
 	uploadTexture(textureID[cellBank], &cell[cellBank][0]);
 #endif
@@ -590,12 +592,12 @@ int _tmain(int argc, _TCHAR* argv[])
 			const GLuint pid = programID[E_PID::PID_LifeGameUpdate];
 			GLuint texSrc = textureID[cellBank];
 			GLuint texDst = textureID[cellBank ^ 1];
-			executeGpGpuProcess(pid, texSrc, texDst);
+			executeGpGpuProcess(pid, 0,texSrc, texDst);
 			//togle cell bank
 			cellBank = cellBank ^ 1;
 		}
 		else{
-			executeGpGpuProcess(programID[E_PID::PID_LifeGameInit], 0, textureID[cellBank]);
+			executeGpGpuProcess(programID[E_PID::PID_LifeGameInit], 0,0, textureID[cellBank]);
 		}
 #else
 		if (framecount % 1000){

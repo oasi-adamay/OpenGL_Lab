@@ -99,6 +99,113 @@ void initCellLife(Mat& imgDst){
 }
 
 
+void executeGpGpuProcess(
+	const GLuint pid,				//progmra ID
+	GLuint _fbo,					//FBO 0ÇÃèÍçáÅAì‡ïîÇ≈ê∂ê¨ÅAîjä¸ å„Ç≈readPixelÇ≈ì«Ç›ÇæÇπÇ»Ç¢
+	GLuint texSrc,					//src texture ID
+	GLuint texDst					//dst texture ID
+	)
+{
+	int width;
+	int height;
+
+	//get texture size
+	{
+		glBindTexture(GL_TEXTURE_2D, texDst);
+
+		glGetTexLevelParameteriv(
+			GL_TEXTURE_2D, 0,
+			GL_TEXTURE_WIDTH, &width
+			);
+
+		glGetTexLevelParameteriv(
+			GL_TEXTURE_2D, 0,
+			GL_TEXTURE_HEIGHT, &height
+			);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
+
+
+	glUseProgram(pid);
+
+	// FBO identifier
+	GLuint fbo = _fbo;
+
+	//---------------------------------
+	// FBO
+	// create FBO (off-screen framebuffer)
+	if (_fbo==0)	glGenFramebuffers(1, &fbo);
+
+	// bind offscreen framebuffer (that is, skip the window-specific render target)
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+	GLuint vao = 0;
+	GLuint vbo = 0;
+
+	// [-1, 1] ÇÃê≥ï˚å`
+	static GLfloat position[][2] = {
+		{ -1.0f, -1.0f },
+		{ 1.0f, -1.0f },
+		{ 1.0f, 1.0f },
+		{ -1.0f, 1.0f }
+	};
+
+	// create vao&vbo
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+
+	// bind vao & vbo
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+	// upload vbo data
+	glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
+
+	// Set VertexAttribute
+
+	GLint attrLoc = glGetAttribLocation(pid, "position");
+	glEnableVertexAttribArray(attrLoc);	//enable attribute Location
+	glVertexAttribPointer(
+		attrLoc,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
+		2,					// size	(Specifies the number of components) x,y
+		GL_FLOAT,			// type
+		GL_FALSE,			// normalized?
+		0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
+		(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
+		);
+
+	//Bind Texture & Fbo
+	if (texSrc){
+		const int textureUnit = 0;			///@@@@@
+		glActiveTexture(GL_TEXTURE0 + textureUnit);
+		glBindTexture(GL_TEXTURE_2D, texSrc);
+		glUniform1i(glGetUniformLocation(pid, "texSrc"), textureUnit);
+		glUniform2f(glGetUniformLocation(pid, "texSrcSize"), (float)width, (float)height);
+	}
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texDst, 0);
+
+	//Viewport
+	glViewport(0, 0, width, height);
+
+	//Render!!
+	glDrawArrays(GL_TRIANGLE_FAN, 0, (int)(sizeof(position) / sizeof(position[0])));
+
+	glFlush();
+
+	// delete vao&vbo
+	glBindVertexArray(0);
+	glDeleteVertexArrays(1, &vao);
+	glDeleteBuffers(1, &vbo);
+
+	//clean up
+	if (_fbo == 0)	glDeleteFramebuffers(1, &fbo);
+	
+}
+
+
 
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -180,17 +287,6 @@ int _tmain(int argc, _TCHAR* argv[])
 		// Create and compile our GLSL program from the shaders
 		GLuint programID = LoadShaders("LifeGame.vertexshader", "LifeGameUpdate.fragmentshader");
 
-		// FBO identifier
-		GLuint fbo = 0;
-
-		//---------------------------------
-		// FBO
-		// create FBO (off-screen framebuffer)
-		glGenFramebuffers(1, &fbo);
-
-		// bind offscreen framebuffer (that is, skip the window-specific render target)
-		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
 		// texture
 
 		enum E_TextureID{
@@ -243,9 +339,24 @@ int _tmain(int argc, _TCHAR* argv[])
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 
+		// FBO identifier
+		GLuint fbo = 0;
+
+		//---------------------------------
+		// FBO
+		// create FBO (off-screen framebuffer)
+		glGenFramebuffers(1, &fbo);
+
+		// bind offscreen framebuffer (that is, skip the window-specific render target)
+//		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
 
 		//Execute
 		{
+#if 1
+			executeGpGpuProcess(programID, fbo , textureID[E_TextureID::SRC], textureID[E_TextureID::DST]);
+#else
+
 			glUseProgram(programID);
 
 			GLuint vao;
@@ -301,6 +412,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			glBindVertexArray(0);
 			glDeleteVertexArrays(1, &vao);
 			glDeleteBuffers(1, &vbo);
+
+
+#endif
 		}
 
 		{	//download from framebuffer
@@ -315,16 +429,20 @@ int _tmain(int argc, _TCHAR* argv[])
 			//wait for Rendering
 			glFinish();
 
+
 			// ReadBuffer
 			glReadBuffer(GL_COLOR_ATTACHMENT0);
 
 			// ReadPixels
 			glReadPixels(0, 0, width, height, format, type, data);
+
+
 		}
 
 		//clean up
-		glDeleteFramebuffers(1, &fbo);
 		glDeleteTextures(sizeof(textureID) / sizeof(textureID[0]), textureID);
+		glDeleteFramebuffers(1, &fbo);
+
 		glDeleteProgram(programID);
 	}
 
