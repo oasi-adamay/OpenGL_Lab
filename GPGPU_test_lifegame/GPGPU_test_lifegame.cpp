@@ -6,11 +6,26 @@
 #include "../common/shader.hpp"
 
 
-
 //Lib 
 #pragma comment (lib, "opengl32.lib")
 #pragma comment (lib, "glew32.lib")
 #pragma comment (lib, "glfw3dll.lib")
+
+//-----------------------------------------------------------------------------
+//#define LIFE_BOUND_REPEAT
+
+
+
+class Timer{
+private:
+	cv::TickMeter meter;
+	string msg;
+public:
+	Timer(string _msg){ msg = _msg;  meter.start(); }
+	~Timer(void){ meter.stop(); std::cout <<msg << meter.getTimeMilli() << "ms" << std::endl; }
+
+};
+
 
 //-----------------------------------------------------------------------------
 // GLFWでエラーとなったときに呼び出される関数
@@ -18,7 +33,6 @@ void glfw_error_callback_func(int error, const char* description){
 	std::cout << "GLFW Error: " << description << std::endl;
 }
 
-//#define LIFE_BOUND_REPEAT
 
 //常に正の数を返すmod
 #define IMOD(i,j) (((i) % (j)) < 0 ? ((i) % (j)) + ((j) < 0 ? -(j) : (j)) : (i) % (j))
@@ -35,11 +49,15 @@ void updateCellLife(const Mat& imgSrc, Mat& imgDst){
 
 	int width = imgSrc.cols;
 	int height = imgSrc.rows;
-	const float* src = imgSrc.ptr<float>(0);
-	float* dst = imgDst.ptr<float>(0);
 
 
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
 	for (int y = 0; y < height; y++){
+		const float* src = imgSrc.ptr<float>(y);
+		float* dst = imgDst.ptr<float>(y);
+
 		for (int x = 0; x < width; x++){
 			int liveCell = 0;
 			for (int dy = -1; dy <= 1; dy++){
@@ -61,12 +79,16 @@ void updateCellLife(const Mat& imgSrc, Mat& imgDst){
 					if (_y >= height)continue;
 #endif
 
-					int idx = _y*width + _x;
+//					int idx = _y*width + _x;
+					int idx = (_y-y)*width + _x;
 					if (src[idx] != 0.0) liveCell++;
+
 				}
 			}
 
-			int idx = (y*width + x);
+//			int idx = (y*width + x);
+			int idx = (x);
+
 			//誕生:死んでいるセルに隣接する生きたセルがちょうど3つあれば、次の世代が誕生する。
 			if (src[idx] == 0.0 && liveCell == 3) dst[idx] = 1.0;
 			//生存:生きているセルに隣接する生きたセルが2つか3つならば、次の世代でも生存する。
@@ -75,7 +97,7 @@ void updateCellLife(const Mat& imgSrc, Mat& imgDst){
 			else if (src[idx] != 0.0 && (liveCell <= 1)) dst[idx] = 0.0;
 			//過密:	生きているセルに隣接する生きたセルが4つ以上ならば、過密により死滅する。
 			else if (src[idx] != 0.0 && (liveCell >= 4)) dst[idx] = 0.0;
-			//現状維持（ここには来ない？）
+			//現状維持
 			else dst[idx] = src[idx];
 		}
 	}
@@ -264,22 +286,37 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	}
 
-//	Mat imgSrc = Mat(Size(32, 24), CV_32FC1);
+#ifdef _DEBUG
 	Mat imgSrc = Mat(Size(8, 4), CV_32FC1);
+#else
+	Mat imgSrc = Mat(Size(1024, 1024), CV_32FC1);
+#endif
 	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
 	Mat imgRef = Mat::zeros(imgSrc.size(), imgSrc.type());
+
+	//世代
+#ifdef _DEBUG
+	const int generations = 1;
+//	const int generations = 3;
+#else
+	const int generations = 1000;
+#endif
+	{
+		cout << "Cell Size:" << imgSrc.size() << endl;
+		cout << "generations:" << generations << endl;
+	}
 
 	//---------------------------------
 	//init Src image
 	initCellLife(imgSrc);
 
-	//---------------------------------
-	//init Ref image
-	updateCellLife(imgSrc,imgRef);
+
 
 	//---------------------------------
 	//Execute GPGPU
 	{
+		cout << "Execute GPGPU" << endl;
+
 		const int width = imgSrc.cols;
 		const int height = imgSrc.rows;
 
@@ -330,6 +367,8 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		//upload imgSrc to texture
 		{
+			//Timer tmr("upload:");
+
 			GLenum format = GL_RED;				//single channel
 			GLenum type = GL_FLOAT;				//float
 			void* data = imgSrc.data;
@@ -348,76 +387,22 @@ int _tmain(int argc, _TCHAR* argv[])
 		glGenFramebuffers(1, &fbo);
 
 		// bind offscreen framebuffer (that is, skip the window-specific render target)
-//		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		//		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
 
 		//Execute
 		{
-#if 1
-			executeGpGpuProcess(programID, fbo , textureID[E_TextureID::SRC], textureID[E_TextureID::DST]);
-#else
-
-			glUseProgram(programID);
-
-			GLuint vao;
-			GLuint vbo;
-
-			// [-1, 1] の正方形
-			static GLfloat position[][2] = {
-				{ -1.0f, -1.0f },
-				{ 1.0f, -1.0f },
-				{ 1.0f, 1.0f },
-				{ -1.0f, 1.0f }
-			};
-
-			// create vao&vbo
-			glGenVertexArrays(1, &vao);
-			glGenBuffers(1, &vbo);
-
-			// bind vao & vbo
-			glBindVertexArray(vao);
-			glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-			// upload vbo data
-			glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
-
-			// Set VertexAttribute
-			glEnableVertexAttribArray(0);	//enable attribute Location
-			glVertexAttribPointer(
-				0,					// attribute 0. No particular reason for 0, but must match the layout in the shader.
-				2,					// size	(Specifies the number of components) x,y
-				GL_FLOAT,			// type
-				GL_FALSE,			// normalized?
-				0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
-				(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
-				);
-
-			//Bind Texture & Fbo
-			const int textureUnit = 0;
-			glActiveTexture(GL_TEXTURE0 + textureUnit);
-			glBindTexture(GL_TEXTURE_2D, textureID[E_TextureID::SRC]);
-			glUniform1i(glGetUniformLocation(programID, "texSrc"), textureUnit);
-			glUniform2f(glGetUniformLocation(programID, "texSrcSize"), (float)width, (float)height);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureID[E_TextureID::DST], 0);
-
-			//Viewport
-			glViewport(0, 0, width, height);
-
-			//Render!!
-			glDrawArrays(GL_TRIANGLE_FAN, 0, (int)(sizeof(position) / sizeof(position[0])));
-
-			glFlush();
-
-			// delete vao&vbo
-			glBindVertexArray(0);
-			glDeleteVertexArrays(1, &vao);
-			glDeleteBuffers(1, &vbo);
-
-
-#endif
+			Timer tmr("LifeGame@gpu:");
+			for (int i = 0; i < generations; i++){
+				GLuint texSrc = textureID[(i % 2)];
+				GLuint texDst = textureID[(i % 2) ^ 1];
+				executeGpGpuProcess(programID, fbo, texSrc, texDst);
+			}
 		}
 
 		{	//download from framebuffer
+			//Timer tmr("download:");
+
 
 			GLenum format = GL_RED;				//single channel
 			GLenum type = GL_FLOAT;				//float
@@ -446,6 +431,27 @@ int _tmain(int argc, _TCHAR* argv[])
 		glDeleteProgram(programID);
 	}
 
+	//---------------------------------
+	//Execute CPU
+	{
+		cout << "Execute CPU" << endl;
+
+		Mat imgBank[2] = { Mat::zeros(imgSrc.size(), imgSrc.type()), Mat::zeros(imgSrc.size(), imgSrc.type()) };
+		int bank = 0;
+		imgBank[bank] = imgSrc.clone();
+		{
+			Timer tmr("LifeGame@cpu:");
+			for (int i = 0; i < generations; i++){
+				updateCellLife(imgBank[bank], imgBank[bank ^ 1]);
+				bank = bank ^ 1;
+			}
+		}
+		imgRef = imgBank[bank].clone();
+
+	}
+
+
+#ifdef _DEBUG
 	//dump 
 	{
 		cout << "imgSrc" << endl;
@@ -456,8 +462,8 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		cout << "imgRef" << endl;
 		cout << imgRef << endl;
-
 	}
+#endif
 
 	//verify
 	int errNum = 0;

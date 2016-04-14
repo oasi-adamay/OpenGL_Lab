@@ -8,11 +8,20 @@ void main(void)
 	float src	= texture(texSrc, gl_FragCoord.xy/texSrcSize.xy).r;
 	float dst;
 	int liveCell = 0;
+//	vec2 texScale = 1.0/texSrcSize.xy;
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(-1., -1.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+0., -1.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+1., -1.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(-1., +0.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+1., +0.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(-1., +1.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+0., +1.))*texScale.xy));
+//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+1., +1.))*texScale.xy));
+
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(-1., -1.))/texSrcSize.xy));
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+0., -1.))/texSrcSize.xy));
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+1., -1.))/texSrcSize.xy));
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(-1., +0.))/texSrcSize.xy));
-//	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+0., +0.))/texSrcSize.xy));
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+1., +0.))/texSrcSize.xy));
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(-1., +1.))/texSrcSize.xy));
 	liveCell += int(texture(texSrc, (gl_FragCoord.xy + vec2(+0., +1.))/texSrcSize.xy));
