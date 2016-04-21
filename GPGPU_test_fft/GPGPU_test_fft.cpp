@@ -274,11 +274,14 @@ void fftr4(
 }
 
 
-void fft_dit_Cooley_Tukey_radix2(const Mat& src, Mat &dst);
-void fft_dit_Cooley_Tukey_radix2_swap(const Mat& src, Mat &dst);
-void fft_dit_Stockham_radix2(const Mat& src, Mat &dst);
-void fft_dit_Stockham_radix2_swap(const Mat& src, Mat &dst);
+void fft_dit_Stockham_radix2_type0(const Mat& src, Mat &dst);
+void fft_dit_Stockham_radix2_type1(const Mat& src, Mat &dst);
 
+typedef std::complex<double> complex_t;
+void fft_type0_dif(int n, complex_t* x);
+void fft_type0_dit(int n, complex_t* x);
+void fft_type1_dif(int n, complex_t* x);
+void fft_type1_dit(int n, complex_t* x);
 
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -338,7 +341,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 //	Mat imgSrc = Mat(Size(4, 1), CV_32FC2);
-	Mat imgSrc = Mat(Size(16, 1), CV_32FC2);
+//	Mat imgSrc = Mat(Size(16, 1), CV_32FC2);
+	Mat imgSrc = Mat(Size(8, 1), CV_32FC2);
 	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
 	Mat imgRef = Mat::zeros(imgSrc.size(), imgSrc.type());
 
@@ -379,9 +383,24 @@ int _tmain(int argc, _TCHAR* argv[])
 
 #if 1
 	{
-		fft_dit_Stockham_radix2_swap(imgSrc, imgDst);
-	//	fft_dit_Cooley_Tukey_radix2_swap(imgSrc, imgDst);
+		//fft_dit_Stockham_radix2_type0(imgSrc, imgDst);
+		fft_dit_Stockham_radix2_type1(imgSrc, imgDst);
 
+	}
+#elif 1
+	{
+		const int n = 8;
+		complex_t* y = new complex_t[n];
+//		cout << "==fft_type0_dif==" << endl;
+//		fft_type0_dif(n, y);
+//		cout << "==fft_type1_dif==" << endl;
+//		fft_type1_dif(n, y);
+		cout << "==fft_type0_dit==" << endl;
+		fft_type0_dit(n, y);
+//		cout << "==fft_type1_dit==" << endl;
+//		fft_type1_dit(n, y);
+
+		delete y;
 	}
 #else
 	//---------------------------------
@@ -475,7 +494,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
-#if 0
+#if 1
 	//dump 
 	{
 		cout << "imgSrc" << endl;
@@ -652,6 +671,9 @@ unsigned int bitSwap(
 	return  b ^ ((x << i) | (x << j));
 }
 
+unsigned int modq(unsigned int x, unsigned int q) { return  x& ((1 << q) - 1); }
+unsigned int divq(unsigned int x, unsigned int q) { return  x >> q; }
+
 
 
 /* FFTの疑似コード - Cooley-Tukey,DIT */
@@ -740,35 +762,19 @@ void fft_dit_Cooley_Tukey_radix2_swap(const Mat& src, Mat &dst){
 		cout << endl;
 	}
 
-#if 0
-	for (int a = 1, b = (N >> radix_exp), p = 0; a < N; a <<= radix_exp, b >>= radix_exp, p++) {
-		//	for (int b = (N >> radix_exp), p = 0; (1<<p) < N;  b >>= radix_exp, p++) {
-
-		cout << "------------------------" << endl;
-		cout << "p:" << p << endl;
-
-		for (int n = 0; n < (N >> radix_exp); n++) {
-			unsigned int _n = insertZeroBits(n, p, radix_exp);
-			int widx = (n  & ((1 << p) - 1))*b;
-			int idx0 = _n;
-			int idx1 = _n + a;
-
-			cout << "(" << idx0 << "," << idx1 << "," << widx << ")";
-			cout << "(p:" << p << ",a:" << a << ",b" << b << ")";
-			cout << endl;
-
-
-		}
-	}
-#endif
-
 
 #else
-	int q = 0;
-	while ((2 << q) < N){ q++; }
 
-	for (int a = 1, b = (N >> radix_exp), p = 0 ; a < N; a <<= radix_exp, b >>= radix_exp, p++,q--) {
-		//	for (int b = (N >> radix_exp), p = 0; (1<<p) < N;  b >>= radix_exp, p++) {
+	int q = 0;
+	int p = 0;
+	while ((2 << q) < N){ q++; }
+	int msb = q;
+
+	/* FFTの計算 */
+	for (p = 0; q >=0 ; p++,q--) {
+
+		int a = 1 << p;
+		int b = 1 << q;
 
 		cout << "------------------------" << endl;
 		cout << "p:" << p << "\t";
@@ -777,41 +783,45 @@ void fft_dit_Cooley_Tukey_radix2_swap(const Mat& src, Mat &dst){
 		cout << "b:" << b << "\t";
 		cout << endl;
 
+
 		for (int n = 0; n < (N >> radix_exp); n++) {
-			unsigned int _n = insertZeroBits(n, p, radix_exp);
-			int widx = (n  & ((1 << p) - 1))*b;
-			int ix0 = _n;
-			int ix1 = _n + a;
+			unsigned int m = insertZeroBits(n, p, radix_exp);
 
-			int iy0 = _n;
-			int iy1 = _n + a;
+			int k = modq(n, p);				// n/b
+			int iw = k*b;		//(n  & ((1 << p) - 1))*b;
+			int ix0 = m;
+			int ix1 = m + a;
 
+			int iy0 = m;
+			int iy1 = m + a;
+
+#if 0
 			if (p -1 >=0){
 				//swap bit 
 				ix0 = bitSwap(ix0, p - 1, p + q, 1);
 				ix1 = bitSwap(ix1, p - 1, p + q, 1);
 			}
-
-
 			{
 				//swap bit 
 				iy0 = bitSwap(iy0, p, p + q, 1);
 				iy1 = bitSwap(iy1, p, p + q, 1);
 			}
-
+#endif
+			cout << "n(" << n << ")\t";
+			cout << "m(" << m << ")\t";
+			cout << "w(" << iw << ")\t";
+			cout << "src(" << ix0 << "," << ix1 << ")\t";
+			cout << "dst(" << iy0 << "," << iy1 << ")\t";
+			cout << endl;
 
 
 			T tmp;
-			tmp[_re_] = x[ix1][_re_] * w[widx][_re_] - x[ix1][_im_] * w[widx][_im_];
-			tmp[_im_] = x[ix1][_re_] * w[widx][_im_] + x[ix1][_im_] * w[widx][_re_];
+			tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+			tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
 
 			y[iy0] = x[ix0] + tmp;
 			y[iy1] = x[ix0] - tmp;
 
-			cout << "w(" << widx << ")\t";
-			cout << "src(" << ix0 << "," << ix1 << ")\t";
-			cout << "dst(" << iy0 << "," << iy1 << ")\t";
-			cout << endl;
 
 		}
 		for (int n = 0; n<N; n = n + 1) x[n] = y[n];
@@ -836,7 +846,7 @@ void fft_dit_Cooley_Tukey_radix2_swap(const Mat& src, Mat &dst){
 
 
 /* FFTの疑似コード - Stockham,DIT */
-void fft_dit_Stockham_radix2(const Mat& src, Mat &dst){
+void fft_dit_Stockham_radix2_type0(const Mat& src, Mat &dst){
 	CV_Assert(src.type() == CV_32FC2);
 	CV_Assert(src.rows == 1);		//Only raw vector
 
@@ -855,7 +865,109 @@ void fft_dit_Stockham_radix2(const Mat& src, Mat &dst){
 	vector<T> w(N / 2);
 	vector<T> x(N);
 	vector<T> y(N);
-	vector<int> bitrev(N);
+	vector<int> bitrev(N/2);
+
+	/* コピー */
+	for (int n = 0; n < N; n++){
+#ifndef  _USE_GLM
+		x[n] = src.at<T>(0, n);
+#else
+		Vec2f val = src.at<Vec2f>(0, n);
+		x[n] = T(val[0], val[1]);
+#endif
+	}
+
+	/* ビットリバース順の事前計算 */
+	bitrev[0] = 0;
+	for (int a = 1, b = (N /4); a<N/2; a <<= 1, b >>= 1) {
+		for (int k = 0; k<a; k++) {
+			bitrev[k + a] = bitrev[k] + b;
+		}
+	}
+
+
+	/* 係数の事前計算 */
+	for (int n = 0; n < N / 2; n++){
+		//オイラーの公式より
+		float jw = (float)(-2 * M_PI * n / N);
+		w[n][_re_] = cos(jw);
+		w[n][_im_] = sin(jw);
+	}
+
+	/* FFTの計算 */
+	int q = 0;
+	int p = 0;
+	while ((2 << q) < N){ q++; }
+
+	for (p = 0; q >= 0; p++, q--) {
+
+		int a = 1 << p;
+		int b = 1 << q;
+
+		cout << "------------------------" << endl;
+		cout << "p:" << p << "\t";
+		cout << "q:" << q << "\t";
+		cout << "a:" << a << "\t";
+		cout << "b:" << b << "\t";
+		cout << endl;
+
+		for (int n = 0; n<N/2; n = n++) {
+			int iw  = modq(n, p)*b;
+			int ix0 = n;
+			int ix1 = ix0 + N / 2;
+			int iy0 = insertZeroBits(n,p,1);
+			int iy1 = iy0 + (1<<p);
+
+			cout << "w(" << iw << ")\t";
+			cout << "src(" << ix0 << "," << ix1 << ")\t";
+			cout << "dst(" << iy0 << "," << iy1 << ")\t";
+			cout << endl;
+
+			T tmp;
+			tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+			tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
+
+
+			y[iy0] = x[ix0] + tmp;
+			y[iy1] = x[ix0] - tmp;
+		}
+		for (int n = 0; n<N; n = n + 1) x[n] = y[n];
+
+	}
+
+	/* コピー */
+	for (int n = 0; n < N; n++){
+#ifndef  _USE_GLM
+		dst.at<Vec2f>(0, n) = x[n];
+#else
+		T val = x[n];
+		dst.at<Vec2f>(0, n) = Vec2f(val.r, val.g);
+#endif
+
+	}
+
+}
+
+/* FFT Stockham,DIT */
+void fft_dit_Stockham_radix2_type1(const Mat& src, Mat &dst){
+	CV_Assert(src.type() == CV_32FC2);
+	CV_Assert(src.rows == 1);		//Only raw vector
+
+	enum { _re_ = 0, _im_ = 1 };
+
+#ifndef  _USE_GLM
+#define T Vec2f 
+#else
+#define T vec2 
+#endif
+
+
+	int N = src.cols;
+	CV_Assert(IsPow2(N));
+
+	vector<T> w(N / 2);
+	vector<T> x(N);
+	vector<T> y(N);
 
 	/* コピー */
 	for (int n = 0; n < N; n++){
@@ -878,36 +990,35 @@ void fft_dit_Stockham_radix2(const Mat& src, Mat &dst){
 	}
 
 	/* FFTの計算 */
-	for (int a = 1, b = N / 2, p = 0; a<N; a *= 2, b /= 2, p++) {
+	int q = 0;
+	int p = 0;
+	while ((2 << q) < N){ q++; }
 
+	for (p = 0; q >= 0; p++, q--) {
 		cout << "------------------------" << endl;
-		cout << "p:" << p << endl;
+		cout << "p:" << p << "\t";
+		cout << "q:" << q << "\t";
+		cout << endl;
 
-		for (int n = 0; n<b; n = n + 1) {
-			for (int k = 0; k<a; k = k + 1) {
-				//				xbuf = x[a*n + N / 2 + k] * w[b*k];
-				//				x1[2 * a*n + k] = x[a*n + k] + xbuf;
-				//				x1[2 * a*n + k + a] = x[a*n + k] - xbuf;
-				T tmp;
-				int ix0 = a*n + k;
-				int ix1 = a*n + N / 2 + k;
+		for (int n = 0; n<N / 2; n = n++) {
+			int iw = (n >> q)<<q;
+			int ix0 = insertZeroBits(n, q, 1);
+			int ix1 = ix0 + (1 << q);
+			int iy0 = n;
+			int iy1 = iy0 + N / 2;
 
-				tmp[_re_] = x[ix1][_re_] * w[b*k][_re_] - x[ix1][_im_] * w[b*k][_im_];
-				tmp[_im_] = x[ix1][_re_] * w[b*k][_im_] + x[ix1][_im_] * w[b*k][_re_];
+			cout << "w(" << iw << ")\t";
+			cout << "src(" << ix0 << "," << ix1 << ")\t";
+			cout << "dst(" << iy0 << "," << iy1 << ")\t";
+			cout << endl;
 
-				int iy0 = 2 * a*n + k;
-				int iy1 = 2 * a*n + k + a;
+			T tmp;
+			tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+			tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
 
-				y[iy0] = x[ix0] + tmp;
-				y[iy1] = x[ix0] - tmp;
+			y[iy0] = x[ix0] + tmp;
+			y[iy1] = x[ix0] - tmp;
 
-				cout << "w(" << b*k << ")\t";
-				cout << "src(" << ix0 << "," << ix1 << ")\t";
-				cout << "dst(" << iy0 << "," << iy1 << ")\t";
-				cout << endl;
-
-
-			}
 		}
 		for (int n = 0; n<N; n = n + 1) x[n] = y[n];
 
@@ -981,11 +1092,15 @@ void fft_dit_Stockham_radix2_swap(const Mat& src, Mat &dst){
 	}
 
 	int q = 0;
+	int p = 0;
 	while ((2 << q) < N){ q++; }
 	int msb = q;
 
 	/* FFTの計算 */
-	for (int a = 1, b = N / 2, p = 0; a<N; a *= 2, b /= 2, p++,q--) {
+	for (p = 0; q >=0 ; p++,q--) {
+
+		int a = 1 << p;
+		int b = 1 << q;
 
 		cout << "------------------------" << endl;
 		cout << "p:" << p << "\t";
@@ -993,43 +1108,79 @@ void fft_dit_Stockham_radix2_swap(const Mat& src, Mat &dst){
 		cout << "a:" << a << "\t";
 		cout << "b:" << b << "\t";
 		cout << endl;
+#if 0
+		for (int n = 0; n<b; n++) {
+			for (int k = 0; k<a; k++) {
+				int j = n;
+				cout <<"j:" << j <<"\t";
+				cout <<"k:" << k <<"\t";
+#else
 
-		for (int n = 0; n<b; n = n + 1) {
-			for (int k = 0; k<a; k = k + 1) {
-				//				xbuf = x[a*n + N / 2 + k] * w[b*k];
-				//				x1[2 * a*n + k] = x[a*n + k] + xbuf;
-				//				x1[2 * a*n + k + a] = x[a*n + k] - xbuf;
+
+//		for (int n = 0; n<(N / 2); n++) {
+		for (int m = 0; m<(N / 2); m++) {
+
+			int n = m;
+#if 1
+			if(p==0){
+				//  210 => 021  Rotate RSFT
+				n = bitSwap(n, 0 , 1, 1);  //
+				n = bitSwap(n, 1 , 2, 1);
+			}
+			if (p == 1){
+				//  210 => 012
+				n = bitSwap(n, 0, 2, 1);  //
+			}
+			if (p == 2){
+				//  210 => 102 Rotate LSFT
+				n = bitSwap(n, 0, 2, 1);  //
+				n = bitSwap(n, 2, 1, 1);  //
+			}
+#endif
+
+			int j = modq(n,q);     // n%b
+			int k = divq(n,q);				// n/b
+			cout << "m:" << m << "\t";
+			cout << "n:" << n << "\t";
+			cout << "j:" << j << "\t";
+			cout << "k:" << k << "\t";
+
+			{
+#endif
 				T tmp;
-				int ix0 = a*n + k;
-				int ix1 = a*n + N / 2 + k;
 
+				//int iw = (n >> q) << q;					//b*k;
+				//int ix0 = (j << p) + k;					//a*j + k;  //
+				//int ix1 = ix0 + N / 2;					//a*j + k + N /2
+				//int iy0 = (j << (p+1)) + k;				//2 * a*j + k;
+				//int iy1 = iy0 + (1<<p);					//2 * a*j + k + a;
+				int iw = b*k;
+				int ix0 = a*j + k;
+				int ix1 = a*j + k + N /2;
+				int iy0 = 2 * a*j + k;
+				int iy1 = 2 * a*j + k + a;
+
+#if 1
 				if (p - 1 >= 0){
 					//					cout << "in swap" << endl;
 					//swap bit 
 					ix0 = bitSwap(ix0, p - 1, msb, 1);
 					ix1 = bitSwap(ix1, p - 1, msb, 1);
 				}
-
-
-				tmp[_re_] = x[ix1][_re_] * w[b*k][_re_] - x[ix1][_im_] * w[b*k][_im_];
-				tmp[_im_] = x[ix1][_re_] * w[b*k][_im_] + x[ix1][_im_] * w[b*k][_re_];
-
-				int iy0 = 2 * a*n + k;
-				int iy1 = 2 * a*n + k + a;
-
 				{
 					//swap bit 
 					iy0 = bitSwap(iy0, p, msb, 1);
 					iy1 = bitSwap(iy1, p, msb, 1);
 				}
+#endif
 
-
-
+				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
 
 				y[iy0] = x[ix0] + tmp;
 				y[iy1] = x[ix0] - tmp;
 
-				cout << "w(" << b*k << ")\t";
+				cout << "w(" << iw << ")\t";
 				cout << "src(" << ix0 << "," << ix1 << ")\t";
 				cout << "dst(" << iy0 << "," << iy1 << ")\t";
 				cout << endl;

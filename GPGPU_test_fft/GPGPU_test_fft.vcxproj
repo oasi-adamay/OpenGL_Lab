@@ -152,6 +152,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\common\shader.cpp" />
+    <ClCompile Include="fft_stockhum.cpp" />
     <ClCompile Include="GPGPU_test_fft.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
