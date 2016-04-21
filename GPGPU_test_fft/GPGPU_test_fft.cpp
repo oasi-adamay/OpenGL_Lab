@@ -11,16 +11,38 @@
 #pragma comment (lib, "glew32.lib")
 #pragma comment (lib, "glfw3dll.lib")
 
+// Usable AlmostEqual function
+bool AlmostEqual2sComplement(float A, float B, int maxUlps)
+{
+	// Make sure maxUlps is non-negative and small enough that the
+	// default NAN won't compare as equal to anything.
+	assert(maxUlps > 0 && maxUlps < 4 * 1024 * 1024);
+	int aInt = *(int*)&A;
+	// Make aInt lexicographically ordered as a twos-complement int
+	if (aInt < 0)
+		aInt = 0x80000000 - aInt;
+	// Make bInt lexicographically ordered as a twos-complement int
+	int bInt = *(int*)&B;
+	if (bInt < 0)
+		bInt = 0x80000000 - bInt;
+	int intDiff = abs(aInt - bInt);
+	if (intDiff <= maxUlps)
+		return true;
+	return false;
+}
+
 //-----------------------------------------------------------------------------
 class Timer{
 private:
 	cv::TickMeter meter;
 	string msg;
 public:
-	Timer(string _msg){ msg = _msg;  meter.start(); }
-	~Timer(void){ meter.stop(); std::cout << msg << meter.getTimeMilli() << "ms" << std::endl; }
+	Timer(string _msg){	msg = _msg;  meter.start(); }
+	~Timer(void){meter.stop(); std::cout << msg << meter.getTimeMilli() << "[ms]" << std::endl; }
 
 };
+
+
 
 //-----------------------------------------------------------------------------
 // GLFWでエラーとなったときに呼び出される関数
@@ -342,7 +364,15 @@ int _tmain(int argc, _TCHAR* argv[])
 
 //	Mat imgSrc = Mat(Size(4, 1), CV_32FC2);
 //	Mat imgSrc = Mat(Size(16, 1), CV_32FC2);
-	Mat imgSrc = Mat(Size(8, 1), CV_32FC2);
+//	Mat imgSrc = Mat(Size(8, 1), CV_32FC2);
+
+//	Mat imgSrc = Mat(Size(8, 8), CV_32FC2);
+//	Mat imgSrc = Mat(Size(4, 4), CV_32FC2);
+//	Mat imgSrc = Mat(Size(16, 16), CV_32FC2);
+
+//	Mat imgSrc = Mat(Size(256, 256), CV_32FC2);
+	Mat imgSrc = Mat(Size(1024, 1024), CV_32FC2);
+
 	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
 	Mat imgRef = Mat::zeros(imgSrc.size(), imgSrc.type());
 
@@ -360,7 +390,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		const int height = imgSrc.rows;
 		for (int y = 0; y < height; y++){
 			for (int x = 0; x < width; x++){
-				imgSrc.at<Vec2f>(y,x) = Vec2f((float)x,0.0);
+				imgSrc.at<Vec2f>(y,x) = Vec2f((float)(x+y),0.0);
 			}
 		}
 	}
@@ -368,14 +398,15 @@ int _tmain(int argc, _TCHAR* argv[])
 	//---------------------------------
 	//CPU FFT(cv::dft)
 	{
+		Timer tmr("cv:dft:\t");
 		const int width = imgSrc.cols;
 		const int height = imgSrc.rows;
 
 		int flags = 0;
 //		flags |= DFT_SCALE;
 		cv::dft(imgSrc, imgRef, flags);
-		//imgRef = imgSrc.clone();
 
+		//imgRef = imgSrc.clone();
 	}
 
 
@@ -383,6 +414,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 #if 1
 	{
+		Timer tmr("fft_dit_Stockham_radix2:\t");
 		//fft_dit_Stockham_radix2_type0(imgSrc, imgDst);
 		fft_dit_Stockham_radix2_type1(imgSrc, imgDst);
 
@@ -494,7 +526,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
-#if 1
+#if 0
 	//dump 
 	{
 		cout << "imgSrc" << endl;
@@ -512,7 +544,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	int errNum = 0;
 	{
 		//float EPS = FLT_MIN * 2;
-		float EPS = 0.00001f;
+//		float EPS = 0.00001f;
+		int ULPS = imgSrc.cols/4;
 		//verify
 		int width = imgSrc.cols;
 		int height = imgSrc.rows;
@@ -520,8 +553,16 @@ int _tmain(int argc, _TCHAR* argv[])
 			for (int x = 0; x < width; x++){
 				Vec2f ref = imgRef.at<Vec2f>(y, x);
 				Vec2f dst = imgDst.at<Vec2f>(y, x);
-				if (fabs(ref[0] - dst[0]) > EPS) errNum++;
-				if (fabs(ref[1] - dst[1]) > EPS) errNum++;
+				if (!AlmostEqual2sComplement(ref[0], dst[0], ULPS)){
+					errNum++;
+				}
+				if (!AlmostEqual2sComplement(ref[0], dst[0], ULPS)){
+					errNum++;
+				}
+
+
+//				if (fabs(ref[0] - dst[0]) > EPS) errNum++;
+//				if (fabs(ref[1] - dst[1]) > EPS) errNum++; 
 			}
 		}
 		cout << "ErrNum:" << errNum << endl;
@@ -555,97 +596,6 @@ bool IsPow2(unsigned int x){
 }
 
 
-/* FFTの疑似コード - Cooley-Tukey,DIT */
-void fft_dit_Cooley_Tukey_radix2(const Mat& src, Mat &dst){
-	CV_Assert(src.type() == CV_32FC2);
-	CV_Assert(src.rows == 1);		//Only raw vector
-
-	enum { _re_ = 0, _im_ = 1 };
-
-#ifndef  _USE_GLM
-#define T Vec2f 
-#else
-#define T vec2 
-#endif
-
-
-	int N = src.cols;
-	CV_Assert(IsPow2(N));
-
-	vector<T> w(N / 2);
-	vector<T> x(N);
-	vector<int> bitrev(N);
-
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		x[n] = src.at<T>(0, n);
-#else
-		Vec2f val = src.at<Vec2f>(0, n);
-		x[n] = T(val[0], val[1]);
-#endif
-	}
-
-
-
-	/* 係数の事前計算 */
-	for (int n = 0; n < N / 2; n++){
-		//オイラーの公式より
-		float jw = (float)(-2 * M_PI * n / N);
-		w[n][_re_] = cos(jw);
-		w[n][_im_] = sin(jw);
-	}
-	/* ビットリバース順の事前計算 */
-	bitrev[0] = 0;
-	for (int a = 1, b = N / 2; a<N; a = a * 2, b = b / 2) {
-		for (int k = 0; k<a; k++) {
-			bitrev[k + a] = bitrev[k] + b;
-		}
-	}
-
-	/* 入力の並び替え */
-	for (int n = 0; n<N; n = n++) {
-		if (n < bitrev[n]) {
-			T tmp = x[n];
-			x[n] = x[bitrev[n]];
-			x[bitrev[n]] = tmp;
-		}
-	}
-	/* FFTの計算 */
-	for (int a = 1, b = N / 2, p = 0; a<N; a *= 2, b /= 2, p++) {
-
-		cout << "------------------------" << endl;
-		cout << "p:" << p << endl;
-
-		for (int k = 0; k<a; k++) {
-			for (int n = k; n<N; n = n + 2 * a) {
-				T tmp;
-				tmp[_re_] = x[n + a][_re_] * w[b*k][_re_] - x[n + a][_im_] * w[b*k][_im_];
-				tmp[_im_] = x[n + a][_re_] * w[b*k][_im_] + x[n + a][_im_] * w[b*k][_re_];
-
-				x[n + a] = x[n] - tmp;
-				x[n] = x[n] + tmp;
-
-				cout << "(" << n << "," << n + a << "," << b*k << ")";
-				cout << endl;
-
-
-			}
-		}
-	}
-
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		dst.at<Vec2f>(0, n) = x[n];
-#else
-		T val = x[n];
-		dst.at<Vec2f>(0, n) = Vec2f(val.r, val.g);
-#endif
-
-	}
-
-}
 
 unsigned int insertZeroBits(
 	const unsigned int src,		//src
@@ -676,173 +626,6 @@ unsigned int divq(unsigned int x, unsigned int q) { return  x >> q; }
 
 
 
-/* FFTの疑似コード - Cooley-Tukey,DIT */
-void fft_dit_Cooley_Tukey_radix2_swap(const Mat& src, Mat &dst){
-	cout << "====================================" << endl;
-	cout << "fft_dit_Cooley_Tukey_radix2_swap" << endl;
-
-	CV_Assert(src.type() == CV_32FC2);
-	CV_Assert(src.rows == 1);		//Only raw vector
-
-	enum { _re_ = 0, _im_ = 1 };
-
-#ifndef  _USE_GLM
-#define T Vec2f 
-#else
-#define T vec2 
-#endif
-
-	const int radix_exp = 1;   //radix 2 = 2^1
-
-
-	int N = src.cols;
-	CV_Assert(IsPow2(N));
-
-	vector<T> w(N >> radix_exp);
-	vector<T> x(N);
-	vector<T> y(N);
-	vector<int> bitrev(N);
-
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		x[n] = src.at<T>(0, n);
-#else
-		Vec2f val = src.at<Vec2f>(0, n);
-		x[n] = T(val[0], val[1]);
-#endif
-	}
-
-
-
-	/* 係数の事前計算 */
-	for (int n = 0; n < (N >> radix_exp); n++){
-		//オイラーの公式より
-		float jw = (float)(-2 * M_PI * n / N);
-		w[n][_re_] = cos(jw);
-		w[n][_im_] = sin(jw);
-	}
-	/* ビットリバース順の事前計算 */
-	bitrev[0] = 0;
-	for (int a = 1, b = (N >> radix_exp); a<N; a <<= radix_exp, b >>= radix_exp) {
-		for (int k = 0; k<a; k++) {
-			bitrev[k + a] = bitrev[k] + b;
-		}
-	}
-
-	/* 入力の並び替え */
-	for (int n = 0; n<N; n = n++) {
-		if (n < bitrev[n]) {
-			T tmp = x[n];
-			x[n] = x[bitrev[n]];
-			x[bitrev[n]] = tmp;
-		}
-	}
-	/* FFTの計算 */
-#if 0
-	for (int a = 1, b = (N >> radix_exp), p = 0; a<N; a <<= radix_exp, b >>= radix_exp, p++) {
-
-		cout << "------------------------" << endl;
-		cout << "p:" << p << endl;
-
-		for (int k = 0; k<a; k++) {
-			for (int n = k; n<N; n = n + (a << radix_exp)) {
-				T tmp;
-				tmp[_re_] = x[n + a][_re_] * w[b*k][_re_] - x[n + a][_im_] * w[b*k][_im_];
-				tmp[_im_] = x[n + a][_re_] * w[b*k][_im_] + x[n + a][_im_] * w[b*k][_re_];
-
-				x[n + a] = x[n] - tmp;
-				x[n] = x[n] + tmp;
-
-				cout << "(" << n << "," << n + a << "," << b*k << ")" << endl;
-
-			}
-		}
-
-		cout << endl;
-	}
-
-
-#else
-
-	int q = 0;
-	int p = 0;
-	while ((2 << q) < N){ q++; }
-	int msb = q;
-
-	/* FFTの計算 */
-	for (p = 0; q >=0 ; p++,q--) {
-
-		int a = 1 << p;
-		int b = 1 << q;
-
-		cout << "------------------------" << endl;
-		cout << "p:" << p << "\t";
-		cout << "q:" << q << "\t";
-		cout << "a:" << a << "\t";
-		cout << "b:" << b << "\t";
-		cout << endl;
-
-
-		for (int n = 0; n < (N >> radix_exp); n++) {
-			unsigned int m = insertZeroBits(n, p, radix_exp);
-
-			int k = modq(n, p);				// n/b
-			int iw = k*b;		//(n  & ((1 << p) - 1))*b;
-			int ix0 = m;
-			int ix1 = m + a;
-
-			int iy0 = m;
-			int iy1 = m + a;
-
-#if 0
-			if (p -1 >=0){
-				//swap bit 
-				ix0 = bitSwap(ix0, p - 1, p + q, 1);
-				ix1 = bitSwap(ix1, p - 1, p + q, 1);
-			}
-			{
-				//swap bit 
-				iy0 = bitSwap(iy0, p, p + q, 1);
-				iy1 = bitSwap(iy1, p, p + q, 1);
-			}
-#endif
-			cout << "n(" << n << ")\t";
-			cout << "m(" << m << ")\t";
-			cout << "w(" << iw << ")\t";
-			cout << "src(" << ix0 << "," << ix1 << ")\t";
-			cout << "dst(" << iy0 << "," << iy1 << ")\t";
-			cout << endl;
-
-
-			T tmp;
-			tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
-			tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
-
-			y[iy0] = x[ix0] + tmp;
-			y[iy1] = x[ix0] - tmp;
-
-
-		}
-		for (int n = 0; n<N; n = n + 1) x[n] = y[n];
-
-	}
-
-#endif
-
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		dst.at<Vec2f>(0, n) = x[n];
-#else
-		T val = x[n];
-		dst.at<Vec2f>(0, n) = Vec2f(val.r, val.g);
-#endif
-
-	}
-
-}
-
 
 
 /* FFTの疑似コード - Stockham,DIT */
@@ -865,7 +648,6 @@ void fft_dit_Stockham_radix2_type0(const Mat& src, Mat &dst){
 	vector<T> w(N / 2);
 	vector<T> x(N);
 	vector<T> y(N);
-	vector<int> bitrev(N/2);
 
 	/* コピー */
 	for (int n = 0; n < N; n++){
@@ -875,14 +657,6 @@ void fft_dit_Stockham_radix2_type0(const Mat& src, Mat &dst){
 		Vec2f val = src.at<Vec2f>(0, n);
 		x[n] = T(val[0], val[1]);
 #endif
-	}
-
-	/* ビットリバース順の事前計算 */
-	bitrev[0] = 0;
-	for (int a = 1, b = (N /4); a<N/2; a <<= 1, b >>= 1) {
-		for (int k = 0; k<a; k++) {
-			bitrev[k + a] = bitrev[k] + b;
-		}
 	}
 
 
@@ -951,257 +725,107 @@ void fft_dit_Stockham_radix2_type0(const Mat& src, Mat &dst){
 /* FFT Stockham,DIT */
 void fft_dit_Stockham_radix2_type1(const Mat& src, Mat &dst){
 	CV_Assert(src.type() == CV_32FC2);
-	CV_Assert(src.rows == 1);		//Only raw vector
-
-	enum { _re_ = 0, _im_ = 1 };
-
-#ifndef  _USE_GLM
-#define T Vec2f 
-#else
-#define T vec2 
-#endif
-
-
+	CV_Assert(src.cols == src.rows);
 	int N = src.cols;
 	CV_Assert(IsPow2(N));
 
-	vector<T> w(N / 2);
-	vector<T> x(N);
-	vector<T> y(N);
+	enum { _re_ = 0, _im_ = 1 };
 
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		x[n] = src.at<T>(0, n);
-#else
-		Vec2f val = src.at<Vec2f>(0, n);
-		x[n] = T(val[0], val[1]);
-#endif
-	}
+	Mat buf[2];
+	buf[0] = src.clone();
+	buf[1] = Mat(src.size(), src.type());
 
+	vector<vec2> w(N / 2);
 
-
-	/* 係数の事前計算 */
+	// --- twidle ----
 	for (int n = 0; n < N / 2; n++){
-		//オイラーの公式より
 		float jw = (float)(-2 * M_PI * n / N);
 		w[n][_re_] = cos(jw);
 		w[n][_im_] = sin(jw);
 	}
 
-	/* FFTの計算 */
-	int q = 0;
-	int p = 0;
-	while ((2 << q) < N){ q++; }
+	int Q = 0;
+	while ((1 << Q) < N){ Q++; }
 
-	for (p = 0; q >= 0; p++, q--) {
-		cout << "------------------------" << endl;
-		cout << "p:" << p << "\t";
-		cout << "q:" << q << "\t";
-		cout << endl;
-
-		for (int n = 0; n<N / 2; n = n++) {
-			int iw = (n >> q)<<q;
-			int ix0 = insertZeroBits(n, q, 1);
-			int ix1 = ix0 + (1 << q);
-			int iy0 = n;
-			int iy1 = iy0 + N / 2;
-
-			cout << "w(" << iw << ")\t";
-			cout << "src(" << ix0 << "," << ix1 << ")\t";
-			cout << "dst(" << iy0 << "," << iy1 << ")\t";
-			cout << endl;
-
-			T tmp;
-			tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
-			tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
-
-			y[iy0] = x[ix0] + tmp;
-			y[iy1] = x[ix0] - tmp;
-
-		}
-		for (int n = 0; n<N; n = n + 1) x[n] = y[n];
-
-	}
-
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		dst.at<Vec2f>(0, n) = x[n];
-#else
-		T val = x[n];
-		dst.at<Vec2f>(0, n) = Vec2f(val.r, val.g);
+	// --- FFT rows ----
+#ifdef _OPENMP
+#pragma omp parallel for
 #endif
+	for (int row = 0; row < src.rows; row++){
+		int bank = 0;
 
-	}
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			vec2* x = (vec2*)buf[bank].ptr<Vec2f>(row);
+			vec2* y = (vec2*)buf[bank^1].ptr<Vec2f>(row);
 
-}
+			//cout << "------------------------" << endl;
+			//cout << "p:" << p << "\t";
+			//cout << "q:" << q << "\t";
+			//cout << endl;
 
+			for (int n = 0; n<N / 2; n = n++) {
+				int iw = (n >> q) << q;
+				int ix0 = insertZeroBits(n, q, 1);
+				int ix1 = ix0 + (1 << q);
+				int iy0 = n;
+				int iy1 = iy0 + N / 2;
 
+				//cout << "w(" << iw << ")\t";
+				//cout << "src(" << ix0 << "," << ix1 << ")\t";
+				//cout << "dst(" << iy0 << "," << iy1 << ")\t";
+				//cout << endl;
 
-
-
-
-
-/* FFTの疑似コード - Stockham,DIT */
-void fft_dit_Stockham_radix2_swap(const Mat& src, Mat &dst){
-	cout << "====================================" << endl;
-	cout << "fft_dit_Stockham_radix2_swap" << endl;
-
-
-	CV_Assert(src.type() == CV_32FC2);
-	CV_Assert(src.rows == 1);		//Only raw vector
-
-	enum { _re_ = 0, _im_ = 1 };
-
-#ifndef  _USE_GLM
-#define T Vec2f 
-#else
-#define T vec2 
-#endif
-
-
-	int N = src.cols;
-	CV_Assert(IsPow2(N));
-
-
-
-	vector<T> w(N / 2);
-	vector<T> x(N);
-	vector<T> y(N);
-	vector<int> bitrev(N);
-
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		x[n] = src.at<T>(0, n);
-#else
-		Vec2f val = src.at<Vec2f>(0, n);
-		x[n] = T(val[0], val[1]);
-#endif
-	}
-
-
-
-	/* 係数の事前計算 */
-	for (int n = 0; n < N / 2; n++){
-		//オイラーの公式より
-		float jw = (float)(-2 * M_PI * n / N);
-		w[n][_re_] = cos(jw);
-		w[n][_im_] = sin(jw);
-	}
-
-	int q = 0;
-	int p = 0;
-	while ((2 << q) < N){ q++; }
-	int msb = q;
-
-	/* FFTの計算 */
-	for (p = 0; q >=0 ; p++,q--) {
-
-		int a = 1 << p;
-		int b = 1 << q;
-
-		cout << "------------------------" << endl;
-		cout << "p:" << p << "\t";
-		cout << "q:" << q << "\t";
-		cout << "a:" << a << "\t";
-		cout << "b:" << b << "\t";
-		cout << endl;
-#if 0
-		for (int n = 0; n<b; n++) {
-			for (int k = 0; k<a; k++) {
-				int j = n;
-				cout <<"j:" << j <<"\t";
-				cout <<"k:" << k <<"\t";
-#else
-
-
-//		for (int n = 0; n<(N / 2); n++) {
-		for (int m = 0; m<(N / 2); m++) {
-
-			int n = m;
-#if 1
-			if(p==0){
-				//  210 => 021  Rotate RSFT
-				n = bitSwap(n, 0 , 1, 1);  //
-				n = bitSwap(n, 1 , 2, 1);
-			}
-			if (p == 1){
-				//  210 => 012
-				n = bitSwap(n, 0, 2, 1);  //
-			}
-			if (p == 2){
-				//  210 => 102 Rotate LSFT
-				n = bitSwap(n, 0, 2, 1);  //
-				n = bitSwap(n, 2, 1, 1);  //
-			}
-#endif
-
-			int j = modq(n,q);     // n%b
-			int k = divq(n,q);				// n/b
-			cout << "m:" << m << "\t";
-			cout << "n:" << n << "\t";
-			cout << "j:" << j << "\t";
-			cout << "k:" << k << "\t";
-
-			{
-#endif
 				T tmp;
-
-				//int iw = (n >> q) << q;					//b*k;
-				//int ix0 = (j << p) + k;					//a*j + k;  //
-				//int ix1 = ix0 + N / 2;					//a*j + k + N /2
-				//int iy0 = (j << (p+1)) + k;				//2 * a*j + k;
-				//int iy1 = iy0 + (1<<p);					//2 * a*j + k + a;
-				int iw = b*k;
-				int ix0 = a*j + k;
-				int ix1 = a*j + k + N /2;
-				int iy0 = 2 * a*j + k;
-				int iy1 = 2 * a*j + k + a;
-
-#if 1
-				if (p - 1 >= 0){
-					//					cout << "in swap" << endl;
-					//swap bit 
-					ix0 = bitSwap(ix0, p - 1, msb, 1);
-					ix1 = bitSwap(ix1, p - 1, msb, 1);
-				}
-				{
-					//swap bit 
-					iy0 = bitSwap(iy0, p, msb, 1);
-					iy1 = bitSwap(iy1, p, msb, 1);
-				}
-#endif
-
 				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
 				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
 
 				y[iy0] = x[ix0] + tmp;
 				y[iy1] = x[ix0] - tmp;
 
-				cout << "w(" << iw << ")\t";
-				cout << "src(" << ix0 << "," << ix1 << ")\t";
-				cout << "dst(" << iy0 << "," << iy1 << ")\t";
-				cout << endl;
+			}
+		}
+	}
 
+	// --- FFT cols ----
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+	for (int col = 0; col < src.cols; col++){
+
+		int bank = (Q&1);	//FFT rows の回数が奇数ならば奇数bankから
+
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			vec2* x = (vec2*)buf[bank].ptr<Vec2f>(0,col);
+			vec2* y = (vec2*)buf[bank ^ 1].ptr<Vec2f>(0, col);
+
+			for (int n = 0; n<N / 2; n = n++) {
+				int iw = (n >> q) << q;
+				int ix0 = insertZeroBits(n, q, 1);
+				int ix1 = ix0 + (1 << q);
+				int iy0 = n;
+				int iy1 = iy0 + N / 2;
+
+				ix0 *= src.cols;
+				ix1 *= src.cols;
+				iy0 *= src.cols;
+				iy1 *= src.cols;
+
+				T tmp;
+				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
+
+				y[iy0] = x[ix0] + tmp;
+				y[iy1] = x[ix0] - tmp;
 
 			}
 		}
-		for (int n = 0; n<N; n = n + 1) x[n] = y[n];
-
 	}
 
-	/* コピー */
-	for (int n = 0; n < N; n++){
-#ifndef  _USE_GLM
-		dst.at<Vec2f>(0, n) = x[n];
-#else
-		T val = x[n];
-		dst.at<Vec2f>(0, n) = Vec2f(val.r, val.g);
-#endif
 
-	}
+	dst = buf[0];
 
 }
+
+
+
 
