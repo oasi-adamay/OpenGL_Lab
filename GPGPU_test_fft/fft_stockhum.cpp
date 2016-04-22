@@ -1,3 +1,5 @@
+#include "stdafx.h"
+
 
 #include <complex>
 #include <cmath>
@@ -207,4 +209,283 @@ void ifft_type1_dit(int n, complex_t* x)
 	delete[] y;
 	for (int k = 0; k < n; k++) x[k] = conj(x[k]);
 }
+
+
+//-----------------------------------------------------------------------
+
+
+//---------------------------------------------------------------------------
+//value is power of 2
+static bool IsPow2(unsigned int x){
+	return (((x)&(x - 1)) == 0);
+}
+
+
+
+static unsigned int insertZeroBits(
+	const unsigned int src,		//src
+	const int idx,				//‘}“ü‚·‚éˆÊ’u
+	const int num				//‘}“ü‚·‚é”
+	)
+{
+	unsigned int ret = src << num;
+	ret &= ~((1 << (idx + num)) - 1);
+	ret |= src & ((1 << (idx)) - 1);
+	return ret;
+}
+
+//http://graphics.stanford.edu/~seander/bithacks.html#SwappingBitsXOR
+ 
+static unsigned int bitSwap(
+	const unsigned int b,		 // bits to swap reside in b
+	const int i,	// positions of bit sequences to swap
+	const int j,	//
+	const int n		// number of consecutive bits in each sequence
+	)
+{
+	unsigned int x = ((b >> i) ^ (b >> j)) & ((1U << n) - 1); // XOR temporary
+	return  b ^ ((x << i) | (x << j));
+}
+
+static unsigned int modq(unsigned int x, unsigned int q) { return  x& ((1 << q) - 1); }
+static unsigned int divq(unsigned int x, unsigned int q) { return  x >> q; }
+
+
+
+// FFT Stockham,DIT
+void fft_dit_Stockham_radix2_type0(const Mat& src, Mat &dst){
+	CV_Assert(src.type() == CV_32FC2);
+	CV_Assert(src.cols == src.rows);
+	int N = src.cols;
+	CV_Assert(IsPow2(N));
+
+	enum { _re_ = 0, _im_ = 1 };
+
+
+	Mat buf[2];
+	buf[0] = src.clone();
+	buf[1] = Mat(src.size(), src.type());
+
+
+	vector<vec2> w(N / 2);
+
+
+	// --- twidle ----
+	for (int n = 0; n < N / 2; n++){
+		float jw = (float)(-2 * M_PI * n / N);
+		w[n][_re_] = cos(jw);
+		w[n][_im_] = sin(jw);
+	}
+
+
+	int Q = 0;
+	while ((1 << Q) < N){ Q++; }
+
+	/* FFT‚ÌŒvŽZ */
+
+	// --- FFT rows ----
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+	for (int row = 0; row < src.rows; row++){
+		int bank = 0;
+
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			vec2* x = (vec2*)buf[bank].ptr<Vec2f>(row);
+			vec2* y = (vec2*)buf[bank ^ 1].ptr<Vec2f>(row);
+
+			int a = 1 << p;
+			int b = 1 << q;
+
+			//cout << "------------------------" << endl;
+			//cout << "p:" << p << "\t";
+			//cout << "q:" << q << "\t";
+			//cout << "a:" << a << "\t";
+			//cout << "b:" << b << "\t";
+			//cout << endl;
+
+			for (int n = 0; n < N / 2; n = n++) {
+				int iw = modq(n, p)*b;
+				int ix0 = n;
+				int ix1 = ix0 + N / 2;
+				int iy0 = insertZeroBits(n, p, 1);
+				int iy1 = iy0 + (1 << p);
+
+				//cout << "w(" << iw << ")\t";
+				//cout << "src(" << ix0 << "," << ix1 << ")\t";
+				//cout << "dst(" << iy0 << "," << iy1 << ")\t";
+				//cout << endl;
+
+				vec2 tmp;
+				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
+
+
+				y[iy0] = x[ix0] + tmp;
+				y[iy1] = x[ix0] - tmp;
+			}
+		}
+
+	}
+	// --- FFT cols ----
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+	for (int col = 0; col < src.cols; col++){
+		int bank = (Q & 1);	//FFT rows ‚Ì‰ñ”‚ªŠï”‚È‚ç‚ÎŠï”bank‚©‚ç
+
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			vec2* x = (vec2*)buf[bank].ptr<Vec2f>(0, col);
+			vec2* y = (vec2*)buf[bank ^ 1].ptr<Vec2f>(0, col);
+
+			int a = 1 << p;
+			int b = 1 << q;
+
+			//cout << "------------------------" << endl;
+			//cout << "p:" << p << "\t";
+			//cout << "q:" << q << "\t";
+			//cout << "a:" << a << "\t";
+			//cout << "b:" << b << "\t";
+			//cout << endl;
+
+			for (int n = 0; n < N / 2; n = n++) {
+				int iw = modq(n, p)*b;
+				int ix0 = n;
+				int ix1 = ix0 + N / 2;
+				int iy0 = insertZeroBits(n, p, 1);
+				int iy1 = iy0 + (1 << p);
+				ix0 *= src.cols;
+				ix1 *= src.cols;
+				iy0 *= src.cols;
+				iy1 *= src.cols;
+
+				//cout << "w(" << iw << ")\t";
+				//cout << "src(" << ix0 << "," << ix1 << ")\t";
+				//cout << "dst(" << iy0 << "," << iy1 << ")\t";
+				//cout << endl;
+
+				vec2 tmp;
+				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
+
+
+				y[iy0] = x[ix0] + tmp;
+				y[iy1] = x[ix0] - tmp;
+			}
+		}
+
+	}
+	dst = buf[0];
+
+}
+
+
+
+// FFT Stockham,DIT
+void fft_dit_Stockham_radix2_type1(const Mat& src, Mat &dst){
+	CV_Assert(src.type() == CV_32FC2);
+	CV_Assert(src.cols == src.rows);
+	int N = src.cols;
+	CV_Assert(IsPow2(N));
+
+	enum { _re_ = 0, _im_ = 1 };
+
+	Mat buf[2];
+	buf[0] = src.clone();
+	buf[1] = Mat(src.size(), src.type());
+
+	vector<vec2> w(N / 2);
+
+	// --- twidle ----
+	for (int n = 0; n < N / 2; n++){
+		float jw = (float)(-2 * M_PI * n / N);
+		w[n][_re_] = cos(jw);
+		w[n][_im_] = sin(jw);
+	}
+
+	int Q = 0;
+	while ((1 << Q) < N){ Q++; }
+
+	// --- FFT rows ----
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+	for (int row = 0; row < src.rows; row++){
+		int bank = 0;
+
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+
+			vec2* x = (vec2*)buf[bank].ptr<Vec2f>(row);
+			vec2* y = (vec2*)buf[bank ^ 1].ptr<Vec2f>(row);
+
+			//cout << "------------------------" << endl;
+			//cout << "p:" << p << "\t";
+			//cout << "q:" << q << "\t";
+			//cout << endl;
+
+			for (int n = 0; n<N / 2; n = n++) {
+				int iw = (n >> q) << q;
+				int ix0 = insertZeroBits(n, q, 1);
+				int ix1 = ix0 + (1 << q);
+				int iy0 = n;
+				int iy1 = iy0 + N / 2;
+
+				//cout << "w(" << iw << ")\t";
+				//cout << "src(" << ix0 << "," << ix1 << ")\t";
+				//cout << "dst(" << iy0 << "," << iy1 << ")\t";
+				//cout << endl;
+
+				vec2 tmp;
+				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
+
+				y[iy0] = x[ix0] + tmp;
+				y[iy1] = x[ix0] - tmp;
+
+			}
+		}
+	}
+
+	// --- FFT cols ----
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+	for (int col = 0; col < src.cols; col++){
+
+		int bank = (Q & 1);	//FFT rows ‚Ì‰ñ”‚ªŠï”‚È‚ç‚ÎŠï”bank‚©‚ç
+
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			vec2* x = (vec2*)buf[bank].ptr<Vec2f>(0, col);
+			vec2* y = (vec2*)buf[bank ^ 1].ptr<Vec2f>(0, col);
+
+			for (int n = 0; n<N / 2; n = n++) {
+				int iw = (n >> q) << q;
+				int ix0 = insertZeroBits(n, q, 1);
+				int ix1 = ix0 + (1 << q);
+				int iy0 = n;
+				int iy1 = iy0 + N / 2;
+
+				ix0 *= src.cols;
+				ix1 *= src.cols;
+				iy0 *= src.cols;
+				iy1 *= src.cols;
+
+				vec2 tmp;
+				tmp[_re_] = x[ix1][_re_] * w[iw][_re_] - x[ix1][_im_] * w[iw][_im_];
+				tmp[_im_] = x[ix1][_re_] * w[iw][_im_] + x[ix1][_im_] * w[iw][_re_];
+
+				y[iy0] = x[ix0] + tmp;
+				y[iy1] = x[ix0] - tmp;
+
+			}
+		}
+	}
+
+
+	dst = buf[0];
+
+}
+
+
+
 
