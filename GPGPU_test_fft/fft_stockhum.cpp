@@ -445,7 +445,7 @@ void fft_dit_Stockham_radix2_type1(const Mat& src, Mat &dst){
 			}
 		}
 	}
-
+#if 1
 	// --- FFT cols ----
 #ifdef _OPENMP
 #pragma omp parallel for
@@ -480,7 +480,7 @@ void fft_dit_Stockham_radix2_type1(const Mat& src, Mat &dst){
 			}
 		}
 	}
-
+#endif
 
 	dst = buf[0];
 
