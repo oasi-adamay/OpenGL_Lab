@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GPGPU_test_lifegame", "GPGP
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GPGPU_test_copy", "GPGPU_test_copy\GPGPU_test_copy.vcxproj", "{ADD292EA-4DF1-4B7B-8013-4AC362307DCE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GPGPU_test_fft", "GPGPU_test_fft\GPGPU_test_fft.vcxproj", "{207F5FF1-0825-487F-89D9-313A517E0324}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -97,6 +99,18 @@ Global
 		{ADD292EA-4DF1-4B7B-8013-4AC362307DCE}.Release|Win32.Build.0 = Release|Win32
 		{ADD292EA-4DF1-4B7B-8013-4AC362307DCE}.Release|x64.ActiveCfg = Release|x64
 		{ADD292EA-4DF1-4B7B-8013-4AC362307DCE}.Release|x64.Build.0 = Release|x64
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Debug|Win32.ActiveCfg = Debug|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Debug|Win32.Build.0 = Debug|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Debug|x64.ActiveCfg = Debug|x64
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Debug|x64.Build.0 = Debug|x64
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Release|Win32.ActiveCfg = Release|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Release|Win32.Build.0 = Release|Win32
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Release|x64.ActiveCfg = Release|x64
+		{207F5FF1-0825-487F-89D9-313A517E0324}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
