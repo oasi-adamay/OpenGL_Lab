@@ -62,10 +62,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
 //	Mat imgSrc = Mat(Size(4, 4), CV_32FC2);
 //	Mat imgSrc = Mat(Size(8, 8), CV_32FC2);
-	Mat imgSrc = Mat(Size(16, 16), CV_32FC2);
+//	Mat imgSrc = Mat(Size(16, 16), CV_32FC2);
 
 //	Mat imgSrc = Mat(Size(256, 256), CV_32FC2);
-//	Mat imgSrc = Mat(Size(1024, 1024), CV_32FC2);
+	Mat imgSrc = Mat(Size(1024, 1024), CV_32FC2);
 //	Mat imgSrc = Mat(Size(4096, 4096), CV_32FC2);
 
 	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
@@ -107,6 +107,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #else
 	{
+		Timer tmr("fft_dit_Stockham_radix2_type1:   \t");
 		fft_dit_Stockham_radix2_type1(imgSrc, imgRef);
 	}
 #endif
@@ -148,8 +149,10 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
-//	int ULPS = MAX(imgSrc.cols / 4, 65536);
-	int ULPS = 16;
+//	int ULPS = MAX(imgSrc.cols / 4, 16);
+	int ULPS = imgSrc.cols*4;
+
+//	int ULPS = 16;
 
 #if 0
 	//dump 

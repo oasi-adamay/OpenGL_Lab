@@ -5,6 +5,9 @@
 #include "../common/shader.hpp"
 #include "Timer.hpp"
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 
 //-----------------------------------------------------------------------------
 //global 
@@ -30,6 +33,7 @@ static void glslFftProcess(
 	const glslFftShader& shader,	//progmra ID
 	const vector<GLuint>& texSrc,	//src texture IDs
 	const vector<GLuint>& texDst,	//dst texture IDs
+	const GLuint texW,				//twidle texture
 	const int fft_stride,			//horizontal:1 vertical:width
 	const int fft_p,				//p 
 	const int fft_q,				//q
@@ -56,10 +60,18 @@ static void glslFftProcess(
 
 	//Bind Texture
 	{
-		for (int i = 0; i < texSrc.size(); i++){
-			glActiveTexture(GL_TEXTURE0 + i);
+		int id = 0;
+		for (int i = 0; i < texSrc.size(); i++, id++){
+			glActiveTexture(GL_TEXTURE0 + id);
 			glBindTexture(GL_TEXTURE_RECTANGLE, texSrc[i]);
-			glUniform1i(shader.texSrc[i], i);
+			glUniform1i(shader.texSrc[i], id);
+		}
+
+		{
+			glActiveTexture(GL_TEXTURE0 + id);
+			glBindTexture(GL_TEXTURE_RECTANGLE, texW);
+			glUniform1i(shader.texW, id);
+			id++;
 		}
 	}
 
@@ -158,6 +170,7 @@ void glslFftInit(void){
 	shader.position = glGetAttribLocation(shader.program, "position");
 	shader.texSrc[0] = glGetUniformLocation(shader.program, "texSrc0");
 	shader.texSrc[1] = glGetUniformLocation(shader.program, "texSrc1");
+	shader.texW = glGetUniformLocation(shader.program, "texW");
 	shader.fft_p = glGetUniformLocation(shader.program, "fft_p");
 	shader.fft_q = glGetUniformLocation(shader.program, "fft_q");
 	shader.fft_stride = glGetUniformLocation(shader.program, "fft_stride");
@@ -241,6 +254,7 @@ void glslFft(const Mat& src, Mat& dst){
 	GLenum type = GL_FLOAT;
 	GLenum internalFormat = GL_RG32F;
 	unsigned int texid[2 * 2 * 2] = { 0 };	//src dst 2bank * (2*2)
+	unsigned int texW =  0 ;	//twidle
 
 	//---------------------------------
 	// CreateTexture
@@ -261,6 +275,23 @@ void glslFft(const Mat& src, Mat& dst){
 
 			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
 		}
+
+		//twidle texture
+		{
+			glGenTextures(1, &texW); // create (reference to) a new texture
+			glBindTexture(GL_TEXTURE_RECTANGLE, texW);
+			// (set texture parameters here)
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+			//create the texture
+			glTexImage2D(GL_TEXTURE_RECTANGLE, 0, internalFormat, width, 1, 0, format, type, 0);
+
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+		}
+
 	}
 
 	//upload src to texture
@@ -276,6 +307,21 @@ void glslFft(const Mat& src, Mat& dst){
 
 			glBindTexture(GL_TEXTURE_RECTANGLE, texid[i]);
 			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, data);
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+		}
+
+		{
+			vector<vec2> w(N / 2);
+			// --- twidle ----
+			for (int n = 0; n < N / 2; n++){
+				float jw = (float)(-2 * M_PI * n / N);
+				w[n][0] = cos(jw);
+				w[n][1] = sin(jw);
+			}
+			void* data = &w[0];
+
+			glBindTexture(GL_TEXTURE_RECTANGLE, texW);
+			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, 1, format, type, data);
 			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
 		}
 	}
@@ -294,23 +340,25 @@ void glslFft(const Mat& src, Mat& dst){
 		vector<GLuint> texDst(2);
 
 		// --- FFT rows ----
-		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
-			for (int i = 0; i < 2; i++){
+		for (int i = 0; i < 2; i++){
+			int bank = 0;
+			for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
 				for (int j = 0; j < 2; j++){
 					texSrc[j] = texid[bank * 4 + i * 2 + j];
 					texDst[j] = texid[(bank ^ 1) * 4 + i * 2 + j];
 				}
-				glslFftProcess(shader, texSrc, texDst, 1, p, q, N ,width, height);
+				glslFftProcess(shader, texSrc, texDst, texW,1, p, q, N ,width, height);
 			}
 		}
 		// --- FFT cols ----
-		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
-			for (int j = 0; j < 2; j++){
+		for (int j = 0; j < 2; j++){
+			int bank = (Q & 1);	//FFT rows ‚Ì‰ñ”‚ªŠï”‚È‚ç‚ÎŠï”bank‚©‚ç
+			for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
 				for (int i = 0; i < 2; i++){
 					texSrc[i] = texid[bank * 4 + i * 2 + j];
 					texDst[i] = texid[(bank ^ 1) * 4 + i * 2 + j];
 				}
-				glslFftProcess(shader, texSrc, texDst, width, p, q, N,width, height);
+				glslFftProcess(shader, texSrc, texDst, texW, width, p, q, N, width, height);
 			}
 		}
 	}
@@ -342,6 +390,7 @@ void glslFft(const Mat& src, Mat& dst){
 
 	glDeleteFramebuffers(1, &fbo);
 	glDeleteTextures(sizeof(texid) / sizeof(texid[0]), texid);
+	glDeleteTextures(1 , &texW);
 
 
 }

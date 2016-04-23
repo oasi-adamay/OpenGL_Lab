@@ -12,6 +12,7 @@ struct glslFftShader
 
 	//uniform  location
 	GLuint texSrc[2];		
+	GLuint texW;
 	GLuint fft_N;
 	GLuint fft_stride;
 	GLuint fft_p;
