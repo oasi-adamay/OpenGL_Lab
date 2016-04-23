@@ -5,6 +5,7 @@
 #include "../common/shader.hpp"
 #include "glslFft.h"
 #include "HookCoutCerr.hpp"
+#include "Timer.hpp"
 
 
 
@@ -34,16 +35,6 @@ bool AlmostEqual2sComplement(float A, float B, int maxUlps)
 	return false;
 }
 
-//-----------------------------------------------------------------------------
-class Timer{
-private:
-	cv::TickMeter meter;
-	string msg;
-public:
-	Timer(string _msg){	msg = _msg;  meter.start(); }
-	~Timer(void){meter.stop(); std::cout << msg << meter.getTimeMilli() << "[ms]" << std::endl; }
-
-};
 
 
 
@@ -70,14 +61,17 @@ int _tmain(int argc, _TCHAR* argv[])
 //	Mat imgSrc = Mat(Size(8, 1), CV_32FC2);
 
 //	Mat imgSrc = Mat(Size(4, 4), CV_32FC2);
-	Mat imgSrc = Mat(Size(8, 8), CV_32FC2);
-//	Mat imgSrc = Mat(Size(16, 16), CV_32FC2);
+//	Mat imgSrc = Mat(Size(8, 8), CV_32FC2);
+	Mat imgSrc = Mat(Size(16, 16), CV_32FC2);
 
 //	Mat imgSrc = Mat(Size(256, 256), CV_32FC2);
 //	Mat imgSrc = Mat(Size(1024, 1024), CV_32FC2);
+//	Mat imgSrc = Mat(Size(4096, 4096), CV_32FC2);
 
 	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
 	Mat imgRef = Mat::zeros(imgSrc.size(), imgSrc.type());
+
+	cout << "Size:" << imgSrc.size() << endl;
 
 	//---------------------------------
 	//init Src image
@@ -101,7 +95,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	//---------------------------------
 	//CPU FFT(cv::dft)
 	{
-		Timer tmr("cv:dft:\t");
+		Timer tmr("cv:dft:   \t");
 		const int width = imgSrc.cols;
 		const int height = imgSrc.rows;
 
@@ -122,9 +116,13 @@ int _tmain(int argc, _TCHAR* argv[])
 
 #if 1
 	{
+		//1‰ñ–Ú‚Í’x‚¢@‚È‚ºH
 		Timer tmr("glslFft:\t");
 		glslFft(imgSrc, imgDst);
-
+	}
+	{
+		Timer tmr("glslFft:\t");
+		glslFft(imgSrc, imgDst);
 	}
 #elif 1
 	{
@@ -150,7 +148,10 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
-#if 1
+//	int ULPS = MAX(imgSrc.cols / 4, 65536);
+	int ULPS = 16;
+
+#if 0
 	//dump 
 	if (imgSrc.cols<=8){
 		cout << "imgSrc" << endl;
@@ -166,15 +167,43 @@ int _tmain(int argc, _TCHAR* argv[])
 		cout << imgDst - imgRef << endl;
 
 	}
+#elif 1
+	{
+
+		Mat imgErr = imgDst - imgRef;
+		for (int y = 0; y < imgSrc.rows; y++){
+			for (int x = 0; x < imgSrc.cols; x++){
+				Vec2f src = imgSrc.at<Vec2f>(y, x);
+				Vec2f dst = imgDst.at<Vec2f>(y, x);
+				Vec2f ref = imgRef.at<Vec2f>(y, x);
+				Vec2f err = imgErr.at<Vec2f>(y, x);
+
+				if (!AlmostEqual2sComplement(dst[0], ref[0], ULPS)){
+					cout << cv::format("r(%4d,%4d)\t", x, y);
+					cout << cv::format("%8g\t", dst[0]);
+					cout << cv::format("%8g\t", ref[0]);
+					cout << cv::format("%8g\t", err[0]);
+					cout << endl;
+				}
+
+				if (!AlmostEqual2sComplement(dst[1], ref[1], ULPS)){
+					cout << cv::format("i(%4d,%4d)\t", x, y);
+					//				cout << cv::format("%8.2e\t", src[1]);
+					cout << cv::format("%8g\t", dst[1]);
+					cout << cv::format("%8g\t", ref[1]);
+					cout << cv::format("%8g\t", err[1]);
+					cout << endl;
+				}
+
+			}
+		}
+
+	}
 #endif
 
 	//verify
 	int errNum = 0;
 	{
-		//float EPS = FLT_MIN * 2;
-//		float EPS = 0.00001f;
-//		int ULPS = imgSrc.cols/4;
-		int ULPS = MAX(imgSrc.cols/4,256);
 		//verify
 		int width = imgSrc.cols;
 		int height = imgSrc.rows;

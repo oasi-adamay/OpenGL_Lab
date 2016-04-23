@@ -3,6 +3,7 @@
 
 #include "glslFft.h"
 #include "../common/shader.hpp"
+#include "Timer.hpp"
 
 
 //-----------------------------------------------------------------------------
@@ -37,98 +38,62 @@ static void glslFftProcess(
 	const int height				//texture size
 )
 {
-	glUseProgram(shader.program);
+//	Timer tmr("glslFftProcess:\t");
+	//program
+	{
+		glUseProgram(shader.program);
+	}
 
-	// FBO identifier
-	GLuint fbo = 0;
-
-	//---------------------------------
-	// FBO
-	// create FBO (off-screen framebuffer)
-	glGenFramebuffers(1, &fbo);
-
-	// bind offscreen framebuffer (that is, skip the window-specific render target)
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-	//---------------------------------
-	// vbo
-	GLuint vao = 0;
-	GLuint vbo = 0;
-
-	// [-1, 1] ÇÃê≥ï˚å`
-	static GLfloat position[][2] = {
-		{ -1.0f, -1.0f },
-		{ 1.0f, -1.0f },
-		{ 1.0f, 1.0f },
-		{ -1.0f, 1.0f }
-	};
-
-	// create vao&vbo
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-
-	// bind vao & vbo
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-	// upload vbo data
-	glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
-
-	// Set VertexAttribute
-	glEnableVertexAttribArray(shader.position);	//enable attribute Location
-	glVertexAttribPointer(
-		shader.position,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
-		2,					// size	(Specifies the number of components) x,y
-		GL_FLOAT,			// type
-		GL_FALSE,			// normalized?
-		0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
-		(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
-		);
 
 	//uniform
-	glUniform1i(shader.fft_stride, fft_stride);
-	glUniform1i(shader.fft_p, fft_p);
-	glUniform1i(shader.fft_q, fft_q);
-	glUniform1i(shader.fft_N, fft_N);
+	{
+		glUniform1i(shader.fft_stride, fft_stride);
+		glUniform1i(shader.fft_p, fft_p);
+		glUniform1i(shader.fft_q, fft_q);
+		glUniform1i(shader.fft_N, fft_N);
+	}
 
 
-	//Bind Texture & Fbo
-	for (int i = 0; i < texSrc.size(); i++){
-		glActiveTexture(GL_TEXTURE0 + i);
-		glBindTexture(GL_TEXTURE_RECTANGLE, texSrc[i]);
-		glUniform1i(shader.texSrc[i], i);
+	//Bind Texture
+	{
+		for (int i = 0; i < texSrc.size(); i++){
+			glActiveTexture(GL_TEXTURE0 + i);
+			glBindTexture(GL_TEXTURE_RECTANGLE, texSrc[i]);
+			glUniform1i(shader.texSrc[i], i);
+		}
 	}
 
 
 	//dst texture
-	for (int i = 0; i < texDst.size(); i++){
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_RECTANGLE, texDst[i], 0);
-	}
-	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-
-	GLenum bufs[] =
 	{
-		GL_COLOR_ATTACHMENT0,
-		GL_COLOR_ATTACHMENT1,
-	};
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glDrawBuffers(2, bufs);
+		for (int i = 0; i < texDst.size(); i++){
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_RECTANGLE, texDst[i], 0);
+		}
+		assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+		GLenum bufs[] =
+		{
+			GL_COLOR_ATTACHMENT0,
+			GL_COLOR_ATTACHMENT1,
+		};
+		glDrawBuffers(2, bufs);
+	}
+	
 
 	//Viewport
-	glViewport(0, 0, width, height);
+	{
+		glViewport(0, 0, width, height);
+	}
 
 	//Render!!
-	glDrawArrays(GL_TRIANGLE_FAN, 0, (int)(sizeof(position) / sizeof(position[0])));
+	{
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+		glFlush();
+	}
 
-	glFlush();
+//	glFinish();
 
-	// delete vao&vbo
-	glBindVertexArray(0);
-	glDeleteVertexArrays(1, &vao);
-	glDeleteBuffers(1, &vbo);
 
-	//clean up
-	glDeleteFramebuffers(1, &fbo);
 
 }
 
@@ -205,8 +170,6 @@ void glslFftInit(void){
 void glslFftTerminate(void){
 	glDeleteProgram(shader.program);
 
-
-
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 }
@@ -232,6 +195,43 @@ void glslFft(const Mat& src, Mat& dst){
 	// bind offscreen framebuffer (that is, skip the window-specific render target)
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
+	//---------------------------------
+	// vbo
+	GLuint vao = 0;
+	GLuint vbo = 0;
+
+	// [-1, 1] ÇÃê≥ï˚å`
+	static GLfloat position[][2] = {
+		{ -1.0f, -1.0f },
+		{ 1.0f, -1.0f },
+		{ 1.0f, 1.0f },
+		{ -1.0f, 1.0f }
+	};
+
+	// create vao&vbo
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+
+	// bind vao & vbo
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+	// upload vbo data
+	glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
+
+	// Set VertexAttribute
+	glEnableVertexAttribArray(shader.position);	//enable attribute Location
+	glVertexAttribPointer(
+		shader.position,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
+		2,					// size	(Specifies the number of components) x,y
+		GL_FLOAT,			// type
+		GL_FALSE,			// normalized?
+		0,					// stride (Specifies the byte offset between consecutive generic vertex attributes)
+		(void*)0			// array buffer offset (Specifies a pointer to the first generic vertex attribute in the array)
+		);
+
+
+
 	// texture
 	// 1/2,1/2 size
 	const int width = src.cols / 2;
@@ -245,6 +245,7 @@ void glslFft(const Mat& src, Mat& dst){
 	//---------------------------------
 	// CreateTexture
 	{
+		//Timer tmr("CreateTexture:\t");
 		glGenTextures(sizeof(texid)/sizeof(texid[0]), texid); // create (reference to) a new texture
 
 		for (int i = 0; i < sizeof(texid) / sizeof(texid[0]); i++){
@@ -264,6 +265,7 @@ void glslFft(const Mat& src, Mat& dst){
 
 	//upload src to texture
 	{
+		Timer tmr("-upload :\t");
 		for (int i = 0; i < 4; i++){
 			int x = (i % 2) * width;
 			int y = (i / 2) * height;
@@ -283,6 +285,8 @@ void glslFft(const Mat& src, Mat& dst){
 	int bank = 0;
 
 	{
+		Timer tmr("-execute:\t");
+
 		int Q = 0;
 		while ((1 << Q) < N){ Q++; }
 
@@ -299,7 +303,6 @@ void glslFft(const Mat& src, Mat& dst){
 				glslFftProcess(shader, texSrc, texDst, 1, p, q, N ,width, height);
 			}
 		}
-#if 1
 		// --- FFT cols ----
 		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
 			for (int j = 0; j < 2; j++){
@@ -310,11 +313,12 @@ void glslFft(const Mat& src, Mat& dst){
 				glslFftProcess(shader, texSrc, texDst, width, p, q, N,width, height);
 			}
 		}
-#endif
 	}
 
 	dst = Mat(src.size(), src.type());
 	{	//download from texture
+		Timer tmr("-download:\t");
+
 		Mat tmp = Mat(Size(width, height), src.type());
 		for (int i = 0; i < 4; i++){
 			void* data = tmp.data;
@@ -332,6 +336,10 @@ void glslFft(const Mat& src, Mat& dst){
 	}
 
 	//clean up
+	glBindVertexArray(0);
+	glDeleteVertexArrays(1, &vao);
+	glDeleteBuffers(1, &vbo);
+
 	glDeleteFramebuffers(1, &fbo);
 	glDeleteTextures(sizeof(texid) / sizeof(texid[0]), texid);
 
