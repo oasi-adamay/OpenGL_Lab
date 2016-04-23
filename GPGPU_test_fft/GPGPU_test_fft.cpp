@@ -119,7 +119,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	{
 		//1‰ñ–Ú‚Í’x‚¢@‚È‚ºH
 		Timer tmr("glslFft:\t");
-		glslFft(imgSrc, imgDst);
+		Mat tmp;
+		glslFft(imgSrc, tmp);
 	}
 	{
 		Timer tmr("glslFft:\t");
