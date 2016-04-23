@@ -339,12 +339,13 @@ void glslFft(const Mat& src, Mat& dst){
 			int x = (i % 2) * width;
 			int y = (i / 2) * height;
 			Rect rect(x, y, width, height);
-			Mat roi = Mat(src, rect).clone();	// 1/2  1/2 rect
+			Mat roi = Mat(src, rect);	// 1/2  1/2 rect
 
 			//bind current pbo for app->pbo transfer
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[bank]); //bind pbo
 			GLubyte* ptr = (GLubyte*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size,
 				GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+			assert(ptr != 0);
 
 			int lSize = roi.cols * roi.elemSize();	// line size in byte
 #ifdef _OPENMP
@@ -424,7 +425,7 @@ void glslFft(const Mat& src, Mat& dst){
 	dst = Mat(src.size(), src.type());
 	{	//download from texture
 		Timer tmr("-download:\t");
-#if 1
+#if 0
 		Mat tmp = Mat(Size(width, height), src.type());
 		for (int i = 0; i < 4; i++){
 			void* data = tmp.data;
@@ -440,21 +441,46 @@ void glslFft(const Mat& src, Mat& dst){
 			tmp.copyTo(roi);
 		}
 #else
-		GLuint pbo = 0;
+		int size = width*height * 2 * 4;
+		GLuint pbo[2];
+		glGenBuffers(2, pbo);
+		for (int i = 0; i < 2; i++){
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]);
+			glBufferData(GL_PIXEL_PACK_BUFFER, size, 0, GL_DYNAMIC_READ);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		}
 
-		for (int i = 0; i < 4; i++){
-			void* data = tmp.data;
-
-			glBindTexture(GL_TEXTURE_RECTANGLE, texid[bank * 4 + i]);
-			glGetTexImage(GL_TEXTURE_RECTANGLE, 0, format, type, data);
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
-
+		for (int i = 0, pbo_bank = 0; i < 4; i++, pbo_bank = bank ^ 1){
 			int x = (i % 2) * width;
 			int y = (i / 2) * height;
 			Rect rect(x, y, width, height);
 			Mat roi = Mat(dst, rect);	// 1/2  1/2 rect
-			tmp.copyTo(roi);
-		}
+
+			//Copy pixels from texture object to pbo_bank
+			glBindTexture(GL_TEXTURE_RECTANGLE, texid[bank*4 + i]);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[pbo_bank]); //bind pbo
+			glGetTexImage(GL_TEXTURE_RECTANGLE, 0, format, type, 0);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+			//bind current pbo for app->pbo transfer
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[pbo_bank]); //bind pbo
+			GLubyte* ptr = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, size,
+				GL_MAP_READ_BIT);
+			assert(ptr!=0);
+
+			int lSize = roi.cols * roi.elemSize();	// line size in byte
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+			for (int y = 0; y < roi.rows; y++){
+				uchar* pSrc = ptr + lSize * y;
+				uchar* pDst = roi.ptr<uchar>(y);
+				memcpy(pDst, pSrc, lSize);
+			}
+			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);		}
+		glDeleteBuffers(2, pbo);
+
 
 #endif
 	}
