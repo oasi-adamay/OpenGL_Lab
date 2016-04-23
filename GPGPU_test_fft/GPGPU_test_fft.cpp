@@ -16,8 +16,14 @@
 #pragma comment (lib, "glfw3dll.lib")
 
 // Usable AlmostEqual function
-bool AlmostEqual2sComplement(float A, float B, int maxUlps)
+bool AlmostEqualUlpsAbsEps(float A, float B, int maxUlps , float maxDiff = 1e-3)
 {
+	// Check if the numbers are really close -- needed
+	// when comparing numbers near zero.
+	float absDiff = fabs(A - B);
+	if (absDiff <= maxDiff)
+		return true;
+
 	// Make sure maxUlps is non-negative and small enough that the
 	// default NAN won't compare as equal to anything.
 	assert(maxUlps > 0 && maxUlps < 4 * 1024 * 1024);
@@ -56,17 +62,12 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	glslFftInit();
 
-//	Mat imgSrc = Mat(Size(4, 1), CV_32FC2);
-//	Mat imgSrc = Mat(Size(16, 1), CV_32FC2);
-//	Mat imgSrc = Mat(Size(8, 1), CV_32FC2);
+//	const int N = 256;
+//	const int N = 512;
+	const int N = 1024;
 
-//	Mat imgSrc = Mat(Size(4, 4), CV_32FC2);
-//	Mat imgSrc = Mat(Size(8, 8), CV_32FC2);
-//	Mat imgSrc = Mat(Size(16, 16), CV_32FC2);
 
-//	Mat imgSrc = Mat(Size(256, 256), CV_32FC2);
-	Mat imgSrc = Mat(Size(1024, 1024), CV_32FC2);
-//	Mat imgSrc = Mat(Size(4096, 4096), CV_32FC2);
+	Mat imgSrc = Mat(Size(N, N), CV_32FC2);
 
 	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
 	Mat imgRef = Mat::zeros(imgSrc.size(), imgSrc.type());
@@ -76,18 +77,15 @@ int _tmain(int argc, _TCHAR* argv[])
 	//---------------------------------
 	//init Src image
 	{
-		//imgSrc.at<Vec2f>(0, 0) = Vec2f(1.5f,-1.0f);
-		//imgSrc.at<Vec2f>(0, 1) = Vec2f(-2.3f, 2.6f);
-		//imgSrc.at<Vec2f>(0, 2) = Vec2f(4.65f, 3.75f);
-		//imgSrc.at<Vec2f>(0, 3) = Vec2f(-3.51f, -2.32f);
-
-		//	double r[4] = { 1.5, -2.3, 4.65, -3.51 }, i[4] = { -1.0, 2.6, 3.75, -2.32 };
+		RNG rng(0xFFFFFFFF);
 
 		const int width = imgSrc.cols;
 		const int height = imgSrc.rows;
 		for (int y = 0; y < height; y++){
 			for (int x = 0; x < width; x++){
-				imgSrc.at<Vec2f>(y,x) = Vec2f((float)(x+y),0.0);
+//				imgSrc.at<Vec2f>(y,x) = Vec2f((float)(x+y),0.0);
+				imgSrc.at<Vec2f>(y, x) = Vec2f((float)rng.gaussian(1.0), (float)rng.gaussian(1.0));
+
 			}
 		}
 	}
@@ -151,7 +149,9 @@ int _tmain(int argc, _TCHAR* argv[])
 #endif
 
 //	int ULPS = MAX(imgSrc.cols / 4, 16);
-	int ULPS = imgSrc.cols*4;
+	int ULPS = imgSrc.cols * 8;
+//	int ULPS = 4096;
+
 
 //	int ULPS = 16;
 
@@ -182,7 +182,7 @@ int _tmain(int argc, _TCHAR* argv[])
 				Vec2f ref = imgRef.at<Vec2f>(y, x);
 				Vec2f err = imgErr.at<Vec2f>(y, x);
 
-				if (!AlmostEqual2sComplement(dst[0], ref[0], ULPS)){
+				if (!AlmostEqualUlpsAbsEps(dst[0], ref[0], ULPS)){
 					cout << cv::format("r(%4d,%4d)\t", x, y);
 					cout << cv::format("%8g\t", dst[0]);
 					cout << cv::format("%8g\t", ref[0]);
@@ -190,7 +190,7 @@ int _tmain(int argc, _TCHAR* argv[])
 					cout << endl;
 				}
 
-				if (!AlmostEqual2sComplement(dst[1], ref[1], ULPS)){
+				if (!AlmostEqualUlpsAbsEps(dst[1], ref[1], ULPS)){
 					cout << cv::format("i(%4d,%4d)\t", x, y);
 					//				cout << cv::format("%8.2e\t", src[1]);
 					cout << cv::format("%8g\t", dst[1]);
@@ -215,10 +215,10 @@ int _tmain(int argc, _TCHAR* argv[])
 			for (int x = 0; x < width; x++){
 				Vec2f ref = imgRef.at<Vec2f>(y, x);
 				Vec2f dst = imgDst.at<Vec2f>(y, x);
-				if (!AlmostEqual2sComplement(ref[0], dst[0], ULPS)){
+				if (!AlmostEqualUlpsAbsEps(ref[0], dst[0], ULPS)){
 					errNum++;
 				}
-				if (!AlmostEqual2sComplement(ref[1], dst[1], ULPS)){
+				if (!AlmostEqualUlpsAbsEps(ref[1], dst[1], ULPS)){
 					errNum++;
 				}
 
