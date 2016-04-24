@@ -196,7 +196,7 @@ void glslFftInit(void){
 	}
 
 	// Create and compile our GLSL program from the shaders
-	shader.program = LoadShaders("Fft.vertexshader", "Fft.fragmentshader");
+	shader.program = LoadShaders("Fft_vs.glsl", "FftRadix2_fs.glsl");
 	shader.position = glGetAttribLocation(shader.program, "position");
 	shader.texSrc[0] = glGetUniformLocation(shader.program, "texSrc0");
 	shader.texSrc[1] = glGetUniformLocation(shader.program, "texSrc1");

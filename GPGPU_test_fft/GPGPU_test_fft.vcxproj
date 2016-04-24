@@ -166,8 +166,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Fft.fragmentshader" />
-    <None Include="Fft.vertexshader" />
+    <None Include="FftRadix2_fs.glsl" />
+    <None Include="Fft_vs.glsl" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
