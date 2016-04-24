@@ -13,9 +13,49 @@
 //#define _USE_PBO_DOWN
 
 //-----------------------------------------------------------------------------
+//glslFftShader
+glslFftShader::glslFftShader(void)
+	:glslBaseShader()
+{
+	// Create and compile our GLSL program from the shaders
+	program = LoadShaders("Fft_vs.glsl", "FftRadix2_fs.glsl");
+
+	// Attribute & Uniform location
+	position = glGetAttribLocation(program, "position");
+	texSrc[0] = glGetUniformLocation(program, "texSrc0");
+	texSrc[1] = glGetUniformLocation(program, "texSrc1");
+	texW = glGetUniformLocation(program, "texW");
+	i_p = glGetUniformLocation(program, "i_p");
+	i_q = glGetUniformLocation(program, "i_q");
+	i_N = glGetUniformLocation(program, "i_N");
+	i_flag = glGetUniformLocation(program, "i_flag");
+	f_xscl = glGetUniformLocation(program, "f_xscl");
+	f_yscl = glGetUniformLocation(program, "f_yscl");
+	f_xconj = glGetUniformLocation(program, "f_xconj");
+	f_yconj = glGetUniformLocation(program, "f_yconj");
+}
+
+glslConjShader::glslConjShader(void)
+	:glslBaseShader()
+{
+	// Create and compile our GLSL program from the shaders
+	program = LoadShaders("Fft_vs.glsl", "Conj_fs.glsl");
+
+	// Attribute & Uniform location
+	position = glGetAttribLocation(program, "position");
+
+	texSrc   = glGetUniformLocation(program, "texSrc");
+
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 //global 
 static GLFWwindow* window = 0;
-static glslFftShader shader = { 0 };
+static glslFftShader* shaderFft =  0;
+static glslConjShader* shaderConj = 0;
 
 //-----------------------------------------------------------------------------
 // GLFWÇ≈ÉGÉâÅ[Ç∆Ç»Ç¡ÇΩÇ∆Ç´Ç…åƒÇ—èoÇ≥ÇÍÇÈä÷êî
@@ -60,31 +100,41 @@ static Size getTextureSize(GLuint tex){
 //---------------------------------------------------------------------------
 //
 static void glslFftProcess(
-	const glslFftShader& shader,	//progmra ID
+	const glslFftShader* shader,	//progmra ID
 	const vector<GLuint>& texSrc,	//src texture IDs
 	const vector<GLuint>& texDst,	//dst texture IDs
 	const GLuint texW,				//twidle texture
-	const int fft_dir,				//horizontal:0 vertical:1
-	const int fft_p,				//p 
-	const int fft_q,				//q
-	const int fft_N,				//N
-	const int width,				//texture size
-	const int height				//texture size
+	const int flag,					//bit0 : horizontal:0 vertical:1
+	const int p,					//p 
+	const int q,					//q
+	const int N,					//N
+	const float xscl,				//xscl
+	const float yscl,				//yscl
+	const float xconj,				//xconj
+	const float yconj				//yconj
 )
 {
+	Size size = getTextureSize(texSrc[0]);
+	int width = size.width;
+	int height = size.height;
+
 //	Timer tmr("glslFftProcess:\t");
 	//program
 	{
-		glUseProgram(shader.program);
+		glUseProgram(shader->program);
 	}
 
 
 	//uniform
 	{
-		glUniform1i(shader.fft_dir, fft_dir);
-		glUniform1i(shader.fft_p, fft_p);
-		glUniform1i(shader.fft_q, fft_q);
-		glUniform1i(shader.fft_N, fft_N);
+		glUniform1i(shader->i_flag, flag);
+		glUniform1i(shader->i_p, p);
+		glUniform1i(shader->i_q, q);
+		glUniform1i(shader->i_N, N);
+		glUniform1f(shader->f_xscl, xscl);
+		glUniform1f(shader->f_yscl, yscl);
+		glUniform1f(shader->f_xconj, xconj);
+		glUniform1f(shader->f_yconj, yconj);
 	}
 
 
@@ -94,13 +144,13 @@ static void glslFftProcess(
 		for (int i = 0; i < texSrc.size(); i++, id++){
 			glActiveTexture(GL_TEXTURE0 + id);
 			glBindTexture(GL_TEXTURE_RECTANGLE, texSrc[i]);
-			glUniform1i(shader.texSrc[i], id);
+			glUniform1i(shader->texSrc[i], id);
 		}
 
 		{
 			glActiveTexture(GL_TEXTURE0 + id);
 			glBindTexture(GL_TEXTURE_RECTANGLE, texW);
-			glUniform1i(shader.texW, id);
+			glUniform1i(shader->texW, id);
 			id++;
 		}
 	}
@@ -137,6 +187,59 @@ static void glslFftProcess(
 
 
 
+}
+
+
+static void glslConjProcess(
+	const glslConjShader* shader,	//progmra ID
+	const vector<GLuint>& texSrc,	//src texture IDs
+	const vector<GLuint>& texDst	//dst texture IDs
+	)
+{
+	Size size = getTextureSize(texSrc[0]);
+	int width = size.width;
+	int height = size.height;
+
+	//program
+	{
+		glUseProgram(shader->program);
+	}
+
+	//uniform
+	{
+	}
+
+	for (int i = 0; i < texSrc.size(); i++){
+		//Bind Texture
+		{
+			int id = 0;
+			glActiveTexture(GL_TEXTURE0 + id);
+			glBindTexture(GL_TEXTURE_RECTANGLE, texSrc[i]);
+			glUniform1i(shader->texSrc, id);
+		}
+		//dst texture
+		{
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE, texDst[i], 0);
+			assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+		}
+
+		GLenum bufs[] =
+		{
+			GL_COLOR_ATTACHMENT0,
+		};
+		glDrawBuffers(1, bufs);
+
+		//Viewport
+		{
+			glViewport(0, 0, width, height);
+		}
+
+		//Render!!
+		{
+			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+			glFlush();
+		}
+	}
 }
 
 
@@ -195,23 +298,17 @@ void glslFftInit(void){
 
 	}
 
-	// Create and compile our GLSL program from the shaders
-	shader.program = LoadShaders("Fft_vs.glsl", "FftRadix2_fs.glsl");
-	shader.position = glGetAttribLocation(shader.program, "position");
-	shader.texSrc[0] = glGetUniformLocation(shader.program, "texSrc0");
-	shader.texSrc[1] = glGetUniformLocation(shader.program, "texSrc1");
-	shader.texW = glGetUniformLocation(shader.program, "texW");
-	shader.fft_p = glGetUniformLocation(shader.program, "fft_p");
-	shader.fft_q = glGetUniformLocation(shader.program, "fft_q");
-	shader.fft_N = glGetUniformLocation(shader.program, "fft_N");
-	shader.fft_dir = glGetUniformLocation(shader.program, "fft_dir");
+	shaderFft = new glslFftShader();
+	shaderConj = new glslConjShader();
 
 }
 
 //-----------------------------------------------------------------------------
 //Terminate glslFft
 void glslFftTerminate(void){
-	glDeleteProgram(shader.program);
+
+	delete shaderFft;
+	delete shaderConj;
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
@@ -378,7 +475,7 @@ void glslFftDownloadTexture(const vector<GLuint>& texArray, Mat&dst)
 
 //-----------------------------------------------------------------------------
 // execute FFT 
-void glslFft(vector<GLuint>& texArray){
+void glslFft(vector<GLuint>& texArray,int flag){
 	assert(texArray.size() == 4);
 
 	Size texSize = 	getTextureSize(texArray[0]);
@@ -422,9 +519,9 @@ void glslFft(vector<GLuint>& texArray){
 	glBufferData(GL_ARRAY_BUFFER, (int)sizeof(position), position, GL_STATIC_DRAW);
 
 	// Set VertexAttribute
-	glEnableVertexAttribArray(shader.position);	//enable attribute Location
+	glEnableVertexAttribArray(shaderFft->position);	//enable attribute Location
 	glVertexAttribPointer(
-		shader.position,	// attribute location.
+		shaderFft->position,	// attribute location.
 		2,					// size	(Specifies the number of components) x,y
 		GL_FLOAT,			// type
 		GL_FALSE,			// normalized?
@@ -528,25 +625,31 @@ void glslFft(vector<GLuint>& texArray){
 		vector<GLuint> texDst(2);
 
 		// --- FFT rows ----
-		for (int i = 0; i < 2; i++){
-			int bank = 0;
-			for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			for (int i = 0; i < 2; i++){
 				for (int j = 0; j < 2; j++){
 					texSrc[j] = texid[bank    ][i * 2 + j];
 					texDst[j] = texid[bank ^ 1][i * 2 + j];
 				}
-				glslFftProcess(shader, texSrc, texDst, texW, 0, p, q, N, width, height);
+				float xscl = ((flag & GLSL_FFT_SCALE) && (flag & GLSL_FFT_INVERSE) && (p == 0)) ? 1.0f / (float)N : 1.0f;
+				float yscl = ((flag & GLSL_FFT_SCALE) && !(flag & GLSL_FFT_INVERSE) && (q == 0)) ? 1.0f / (float)N : 1.0f;
+				float xconj = ((flag & GLSL_FFT_INVERSE) && (p == 0)) ? -1.0f : 1.0f;
+				float yconj = 1.0f;
+				glslFftProcess(shaderFft, texSrc, texDst, texW, 0, p, q, N, xscl, yscl, xconj,yconj);
 			}
 		}
 		// --- FFT cols ----
-		for (int j = 0; j < 2; j++){
-			int bank = (Q & 1);	//FFT rows ÇÃâÒêîÇ™äÔêîÇ»ÇÁÇŒäÔêîbankÇ©ÇÁ
-			for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+		for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
+			for (int j = 0; j < 2; j++){
 				for (int i = 0; i < 2; i++){
 					texSrc[i] = texid[bank    ][i * 2 + j];
 					texDst[i] = texid[bank ^ 1][i * 2 + j];
 				}
-				glslFftProcess(shader, texSrc, texDst, texW, 1, p, q, N, width, height);
+				float yscl = ((flag & GLSL_FFT_SCALE) && !(flag & GLSL_FFT_INVERSE) && (q == 0)) ? 1.0f / (float)N : 1.0f;
+				float xscl = ((flag & GLSL_FFT_SCALE) && (flag & GLSL_FFT_INVERSE) && (p == 0)) ? 1.0f / (float)N : 1.0f;
+				float xconj = 1.0f;
+				float yconj = ((flag & GLSL_FFT_INVERSE) && (q == 0)) ? -1.0f : 1.0f;
+				glslFftProcess(shaderFft, texSrc, texDst, texW, 1, p, q, N, xscl, yscl, xconj, yconj);
 			}
 		}
 	}
@@ -563,7 +666,7 @@ void glslFft(vector<GLuint>& texArray){
 }
 
 
-void glslFft(const Mat& src, Mat& dst){
+void glslFft(const Mat& src, Mat& dst, int flag){
 	CV_Assert(src.type() == CV_32FC2);
 	CV_Assert(src.cols == src.rows);
 
@@ -605,7 +708,7 @@ void glslFft(const Mat& src, Mat& dst){
 
 	//---------------------------------
 	//fft
-	glslFft(texArray);
+	glslFft(texArray, flag);
 
 	//---------------------------------
 	//download

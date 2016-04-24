@@ -62,5 +62,8 @@
     <None Include="Fft_vs.glsl">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Conj_fs.glsl">
+      <Filter>Shader</Filter>
+    </None>
   </ItemGroup>
 </Project>

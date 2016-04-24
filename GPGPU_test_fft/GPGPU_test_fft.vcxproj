@@ -166,6 +166,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="Conj_fs.glsl" />
     <None Include="FftRadix2_fs.glsl" />
     <None Include="Fft_vs.glsl" />
     <None Include="packages.config" />

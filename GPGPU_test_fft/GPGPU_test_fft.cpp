@@ -62,15 +62,21 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	glslFftInit();
 
+//	const int N = 4;
+
 //	const int N = 256;
 //	const int N = 512;
 	const int N = 1024;
 
 
 	Mat imgSrc = Mat(Size(N, N), CV_32FC2);
+	Mat imgFft = Mat::zeros(imgSrc.size(), imgSrc.type());
+	Mat imgFftRef = Mat::zeros(imgSrc.size(), imgSrc.type());
 
-	Mat imgDst = Mat::zeros(imgSrc.size(), imgSrc.type());
-	Mat imgRef = Mat::zeros(imgSrc.size(), imgSrc.type());
+	Mat imgIfft = Mat::zeros(imgSrc.size(), imgSrc.type());
+	Mat imgIfftRef = Mat::zeros(imgSrc.size(), imgSrc.type());
+
+
 
 	cout << "Size:" << imgSrc.size() << endl;
 
@@ -98,15 +104,24 @@ int _tmain(int argc, _TCHAR* argv[])
 		const int height = imgSrc.rows;
 
 		int flags = 0;
-//		flags |= DFT_SCALE;
-		cv::dft(imgSrc, imgRef, flags);
+		flags |= DFT_SCALE;
+		cv::dft(imgSrc, imgFftRef, flags);
 
-		//imgRef = imgSrc.clone();
+		//imgFftRef = imgSrc.clone();
 	}
+	{
+		Timer tmr("cv:dft:   \t");
+		int flags = 0;
+		flags |= DFT_INVERSE;
+		cv::dft(imgFftRef, imgIfftRef, flags);
+	}
+
+
+
 #else
 	{
 		Timer tmr("fft_dit_Stockham_radix2_type1:   \t");
-		fft_dit_Stockham_radix2_type1(imgSrc, imgRef);
+		fft_dit_Stockham_radix2_type1(imgSrc, imgFftRef);
 	}
 #endif
 
@@ -118,17 +133,22 @@ int _tmain(int argc, _TCHAR* argv[])
 		//1‰ñ–Ú‚Í’x‚¢@‚È‚ºH
 		Timer tmr("glslFft:\t");
 		Mat tmp;
-		glslFft(imgSrc, tmp);
+		int flags = 0;
+		flags |= GLSL_FFT_SCALE;
+		glslFft(imgSrc, tmp, flags);
 	}
 	{
 		Timer tmr("glslFft:\t");
-		glslFft(imgSrc, imgDst);
+		int flags = 0;
+		flags |= GLSL_FFT_SCALE;
+		glslFft(imgSrc, imgFft, flags);
 	}
+
 #elif 1
 	{
 		Timer tmr("fft_dit_Stockham_radix2:\t");
-		//fft_dit_Stockham_radix2_type0(imgSrc, imgDst);
-		fft_dit_Stockham_radix2_type1(imgSrc, imgDst);
+		//fft_dit_Stockham_radix2_type0(imgSrc, imgFft);
+		fft_dit_Stockham_radix2_type1(imgSrc, imgFft);
 
 	}
 #else 
@@ -148,6 +168,22 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
+#if 1
+	{
+		Timer tmr("glslFft(I):\t");
+		Mat tmp;
+		int flags = 0;
+		flags |= GLSL_FFT_INVERSE;
+		glslFft(imgFft, tmp, flags);
+	}
+	{
+		Timer tmr("glslFft(I):\t");
+		int flags = 0;
+		flags |= GLSL_FFT_INVERSE;
+		glslFft(imgFft, imgIfft, flags);
+	}
+#endif
+
 //	int ULPS = MAX(imgSrc.cols / 4, 16);
 	int ULPS = imgSrc.cols * 8;
 //	int ULPS = 4096;
@@ -161,25 +197,29 @@ int _tmain(int argc, _TCHAR* argv[])
 		cout << "imgSrc" << endl;
 		cout << imgSrc << endl;
 
-		cout << "imgRef" << endl;
-		cout << imgRef << endl;
+		cout << "imgFftRef" << endl;
+		cout << imgFftRef << endl;
 
-		cout << "imgDst" << endl;
-		cout << imgDst << endl;
+		cout << "imgFft" << endl;
+		cout << imgFft << endl;
 
-		cout << "errt" << endl;
-		cout << imgDst - imgRef << endl;
+		cout << "imgIfftRef" << endl;
+		cout << imgIfftRef << endl;
+
+		cout << "imgIfft" << endl;
+		cout << imgIfft << endl;
+
 
 	}
 #elif 1
 	{
 
-		Mat imgErr = imgDst - imgRef;
+		Mat imgErr = imgFft - imgFftRef;
 		for (int y = 0; y < imgSrc.rows; y++){
 			for (int x = 0; x < imgSrc.cols; x++){
 				Vec2f src = imgSrc.at<Vec2f>(y, x);
-				Vec2f dst = imgDst.at<Vec2f>(y, x);
-				Vec2f ref = imgRef.at<Vec2f>(y, x);
+				Vec2f dst = imgFft.at<Vec2f>(y, x);
+				Vec2f ref = imgFftRef.at<Vec2f>(y, x);
 				Vec2f err = imgErr.at<Vec2f>(y, x);
 
 				if (!AlmostEqualUlpsAbsEps(dst[0], ref[0], ULPS)){
@@ -213,20 +253,34 @@ int _tmain(int argc, _TCHAR* argv[])
 		int height = imgSrc.rows;
 		for (int y = 0; y < height; y++){
 			for (int x = 0; x < width; x++){
-				Vec2f ref = imgRef.at<Vec2f>(y, x);
-				Vec2f dst = imgDst.at<Vec2f>(y, x);
+				Vec2f ref = imgFftRef.at<Vec2f>(y, x);
+				Vec2f dst = imgFft.at<Vec2f>(y, x);
 				if (!AlmostEqualUlpsAbsEps(ref[0], dst[0], ULPS)){
 					errNum++;
 				}
 				if (!AlmostEqualUlpsAbsEps(ref[1], dst[1], ULPS)){
 					errNum++;
 				}
-
-
-//				if (fabs(ref[0] - dst[0]) > EPS) errNum++;
-//				if (fabs(ref[1] - dst[1]) > EPS) errNum++; 
 			}
 		}
+
+#if 1
+		for (int y = 0; y < height; y++){
+			for (int x = 0; x < width; x++){
+				Vec2f ref = imgIfftRef.at<Vec2f>(y, x);
+				Vec2f dst = imgIfft.at<Vec2f>(y, x);
+				if (!AlmostEqualUlpsAbsEps(ref[0], dst[0], ULPS)){
+					errNum++;
+				}
+				if (!AlmostEqualUlpsAbsEps(ref[1], dst[1], ULPS)){
+					errNum++;
+				}
+			}
+		}
+#endif
+
+
+
 		cout << "ErrNum:" << errNum << endl;
 	}
 
@@ -234,7 +288,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	//visualize
 	{
 		imshow("src", imgSrc);
-		imshow("dst", imgDst);
+		imshow("dst", imgFft);
 		waitKey();
 	}
 #endif
