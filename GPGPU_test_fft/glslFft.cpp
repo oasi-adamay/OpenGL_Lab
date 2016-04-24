@@ -30,6 +30,33 @@ static bool IsPow2(unsigned int x){
 }
 
 
+static Size getTextureSize(GLuint tex){
+	int width;
+	int height;
+
+	//get texture size
+
+	glBindTexture(GL_TEXTURE_RECTANGLE, tex);
+	glGetTexLevelParameteriv(
+		GL_TEXTURE_RECTANGLE, 0,
+		GL_TEXTURE_WIDTH, &width
+		);
+
+	glGetTexLevelParameteriv(
+		GL_TEXTURE_RECTANGLE, 0,
+		GL_TEXTURE_HEIGHT, &height
+		);
+
+	glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+	return Size(width, height);
+}
+
+
+
+
+
+
 //---------------------------------------------------------------------------
 //
 static void glslFftProcess(
@@ -190,14 +217,173 @@ void glslFftTerminate(void){
 	glfwTerminate();
 }
 
+
 //-----------------------------------------------------------------------------
-//
-void glslFft(const Mat& src, Mat& dst){
+//Upload texture from cv::Mat to GL texture
+void glslFftUploadTexture(const Mat&src, const vector<GLuint>& texArray){
 	CV_Assert(src.type() == CV_32FC2);
 	CV_Assert(src.cols == src.rows);
+	assert(texArray.size() == 4);
 
-	int N = src.cols;
-	CV_Assert(IsPow2(N));
+	// texture
+	const int width = src.cols/2;
+	const int height = src.rows/ 2;
+	GLenum format = GL_RG;
+	GLenum type = GL_FLOAT;
+
+	{
+		Timer tmr("-upload :\t");
+#ifdef _USE_PBO_UP
+		int size = width*height * (int)src.elemSize();
+		GLuint pbo[4];
+		glGenBuffers(4, pbo);
+		for (int i = 0; i < 4; i++){
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
+			glBufferData(GL_PIXEL_UNPACK_BUFFER, size, 0, GL_DYNAMIC_DRAW);
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+		}
+
+		for (int i = 0; i < 4; i++){
+			int x = (i % 2) * width;
+			int y = (i / 2) * height;
+			Rect rect(x, y, width, height);
+			Mat roi = Mat(src, rect);	// 1/2  1/2 rect
+
+			//bind current pbo for app->pbo transfer
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]); //bind pbo
+			GLubyte* ptr = (GLubyte*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size,
+				GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+			assert(ptr != 0);
+
+			int lSize = roi.cols * (int)roi.elemSize();	// line size in byte
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+			for (int y = 0; y < roi.rows; y++){
+				uchar* pSrc = roi.ptr<uchar>(y);
+				uchar* pDst = ptr + lSize * y;
+				memcpy(pDst, pSrc, lSize);
+			}
+			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);			//Copy pixels from pbo to texture object
+			glBindTexture(GL_TEXTURE_RECTANGLE, texArray[i]);
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]); //bind pbo
+			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, 0);
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+		}
+
+		glDeleteBuffers(4, pbo);
+#else
+		for (int i = 0; i < 4; i++){
+			int x = (i % 2) * width;
+			int y = (i / 2) * height;
+			Rect rect(x, y, width, height);
+			Mat roi = Mat(src, rect).clone();	// 1/2  1/2 rect
+			CV_Assert(roi.isContinuous());
+			void* data = roi.data;
+
+			glBindTexture(GL_TEXTURE_RECTANGLE, texArray[i]);
+			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, data);
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+		}
+
+
+
+#endif
+	}
+
+}
+
+//-----------------------------------------------------------------------------
+//Download texture from GL textures to cv::Mat
+void glslFftDownloadTexture(const vector<GLuint>& texArray, Mat&dst)
+{
+	assert(texArray.size() == 4);
+	Size size = getTextureSize(texArray[0]);
+	dst = Mat(size*2, CV_32FC2);
+
+	// texture
+	const int width = size.width;
+	const int height = size.height;
+	GLenum format = GL_RG;
+	GLenum type = GL_FLOAT;
+
+	{	//download from texture
+		Timer tmr("-download:\t");
+#ifdef _USE_PBO_DOWN
+		int size = width*height * dst.elemSize();
+		GLuint pbo[4];
+		glGenBuffers(4, pbo);
+		for (int i = 0; i < 4; i++){
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]);
+			glBufferData(GL_PIXEL_PACK_BUFFER, size, 0, GL_DYNAMIC_READ);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		}
+
+		for (int i = 0; i < 4; i++){
+			int x = (i % 2) * width;
+			int y = (i / 2) * height;
+			Rect rect(x, y, width, height);
+			Mat roi = Mat(dst, rect);	// 1/2  1/2 rect
+
+			//Copy pixels from texture object to pbo_bank
+			glBindTexture(GL_TEXTURE_RECTANGLE, texArray[i]);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]); //bind pbo
+			glGetTexImage(GL_TEXTURE_RECTANGLE, 0, format, type, 0);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+			//bind current pbo for app->pbo transfer
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]); //bind pbo
+			GLubyte* ptr = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, size,
+				GL_MAP_READ_BIT);
+			assert(ptr != 0);
+
+			int lSize = roi.cols * roi.elemSize();	// line size in byte
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+			for (int y = 0; y < roi.rows; y++){
+				uchar* pSrc = ptr + lSize * y;
+				uchar* pDst = roi.ptr<uchar>(y);
+				memcpy(pDst, pSrc, lSize);
+			}
+			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);		}
+		glDeleteBuffers(2, pbo);
+#else
+		Mat tmp = Mat(Size(width, height), dst.type());
+		for (int i = 0; i < 4; i++){
+			void* data = tmp.data;
+
+			glBindTexture(GL_TEXTURE_RECTANGLE, texArray[i]);
+			glGetTexImage(GL_TEXTURE_RECTANGLE, 0, format, type, data);
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+			int x = (i % 2) * width;
+			int y = (i / 2) * height;
+			Rect rect(x, y, width, height);
+			Mat roi = Mat(dst, rect);	// 1/2  1/2 rect
+			tmp.copyTo(roi);
+		}
+
+
+#endif
+	}
+
+
+}
+
+
+
+//-----------------------------------------------------------------------------
+// execute FFT 
+void glslFft(vector<GLuint>& texArray){
+	assert(texArray.size() == 4);
+
+	Size texSize = 	getTextureSize(texArray[0]);
+	int N = texSize.width * 2;
+	assert(IsPow2(N));
 
 
 	//FBO 
@@ -238,7 +424,7 @@ void glslFft(const Mat& src, Mat& dst){
 	// Set VertexAttribute
 	glEnableVertexAttribArray(shader.position);	//enable attribute Location
 	glVertexAttribPointer(
-		shader.position,			// attribute 0. No particular reason for 0, but must match the layout in the shader.
+		shader.position,	// attribute location.
 		2,					// size	(Specifies the number of components) x,y
 		GL_FLOAT,			// type
 		GL_FALSE,			// normalized?
@@ -249,24 +435,23 @@ void glslFft(const Mat& src, Mat& dst){
 
 
 	// texture
-	// 1/2,1/2 size
-	const int width = src.cols / 2;
-	const int height = src.rows / 2;
+	const int width = texSize.width;
+	const int height = texSize.height;
 
 	GLenum format = GL_RG;
 	GLenum type = GL_FLOAT;
 	GLenum internalFormat = GL_RG32F;
-	unsigned int texid[2 * 2 * 2] = { 0 };	//src dst 2bank * (2*2)
-	unsigned int texW =  0 ;	//twidle
+	vector<GLuint> texTmp(texArray.size());
+	GLuint texW = 0;	//twidle
 
 	//---------------------------------
 	// CreateTexture
 	{
 		//Timer tmr("CreateTexture:\t");
-		glGenTextures(sizeof(texid)/sizeof(texid[0]), texid); // create (reference to) a new texture
+		glGenTextures((GLsizei)texTmp.size(), &texTmp[0]); // create (reference to) a new texture
 
-		for (int i = 0; i < sizeof(texid) / sizeof(texid[0]); i++){
-			glBindTexture(GL_TEXTURE_RECTANGLE, texid[i]);
+		for (int i = 0; i < texTmp.size(); i++){
+			glBindTexture(GL_TEXTURE_RECTANGLE, texTmp[i]);
 			// (set texture parameters here)
 			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -297,84 +482,36 @@ void glslFft(const Mat& src, Mat& dst){
 
 	}
 
-	//upload src to texture
+	//---------------------------------
+	// upload teidle texture
 	{
-		Timer tmr("-upload :\t");
-#ifndef _USE_PBO_UP
-		for (int i = 0; i < 4; i++){
-			int x = (i % 2) * width;
-			int y = (i / 2) * height;
-			Rect rect(x, y, width, height);
-			Mat roi = Mat(src, rect).clone();	// 1/2  1/2 rect
-			CV_Assert(roi.isContinuous());
-			void* data = roi.data;
-
-			glBindTexture(GL_TEXTURE_RECTANGLE, texid[i]);
-			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, data);
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+		vector<vec2> w(N / 2);
+		// --- twidle ----
+		//#ifdef _OPENMP
+		//#pragma omp parallel for
+		//#endif
+		for (int n = 0; n < N / 2; n++){
+			float jw = (float)(-2 * M_PI * n / N);
+			w[n][0] = cos(jw);
+			w[n][1] = sin(jw);
 		}
+		void* data = &w[0];
 
-#else
-		int size = width*height * (int)src.elemSize();
-		GLuint pbo[4];
-		glGenBuffers(4, pbo);
-		for (int i = 0; i < 4; i++){
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]);
-			glBufferData(GL_PIXEL_UNPACK_BUFFER, size , 0, GL_DYNAMIC_DRAW);
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-		}
+		glBindTexture(GL_TEXTURE_RECTANGLE, texW);
+		glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, 1, format, type, data);
+		glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+	}
 
-		for (int i = 0; i < 4; i++){
-			int x = (i % 2) * width;
-			int y = (i / 2) * height;
-			Rect rect(x, y, width, height);
-			Mat roi = Mat(src, rect);	// 1/2  1/2 rect
 
-			//bind current pbo for app->pbo transfer
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]); //bind pbo
-			GLubyte* ptr = (GLubyte*)glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size,
-				GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-			assert(ptr != 0);
-
-			int lSize = roi.cols * (int)roi.elemSize();	// line size in byte
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-			for (int y = 0; y < roi.rows; y++){
-				uchar* pSrc = roi.ptr<uchar>(y);
-				uchar* pDst = ptr + lSize * y;
-				memcpy(pDst, pSrc, lSize);  
-			}
-			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);			//Copy pixels from pbo to texture object
-			glBindTexture(GL_TEXTURE_RECTANGLE, texid[i]);
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]); //bind pbo
-			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, 0);
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0); 
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
-
-		}
-
-		glDeleteBuffers(4, pbo);
-
-#endif
-		{
-			vector<vec2> w(N / 2);
-			// --- twidle ----
-//#ifdef _OPENMP
-//#pragma omp parallel for
-//#endif
-			for (int n = 0; n < N / 2; n++){
-				float jw = (float)(-2 * M_PI * n / N);
-				w[n][0] = cos(jw);
-				w[n][1] = sin(jw);
-			}
-			void* data = &w[0];
-
-			glBindTexture(GL_TEXTURE_RECTANGLE, texW);
-			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, 1, format, type, data);
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
-		}
-
+	//texid‚ÉƒZƒbƒg
+	vector<vector<GLuint>> texid(2);
+	texid[0].resize(texArray.size());
+	texid[1].resize(texTmp.size());
+	for (int i = 0; i < (int)texArray.size(); i++){
+		texid[0][i] = texArray[i];
+	}
+	for (int i = 0; i < (int)texTmp.size(); i++){
+		texid[1][i] = texTmp[i];
 	}
 
 
@@ -395,10 +532,10 @@ void glslFft(const Mat& src, Mat& dst){
 			int bank = 0;
 			for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
 				for (int j = 0; j < 2; j++){
-					texSrc[j] = texid[bank * 4 + i * 2 + j];
-					texDst[j] = texid[(bank ^ 1) * 4 + i * 2 + j];
+					texSrc[j] = texid[bank    ][i * 2 + j];
+					texDst[j] = texid[bank ^ 1][i * 2 + j];
 				}
-				glslFftProcess(shader, texSrc, texDst, texW,0, p, q, N ,width, height);
+				glslFftProcess(shader, texSrc, texDst, texW, 0, p, q, N, width, height);
 			}
 		}
 		// --- FFT cols ----
@@ -406,75 +543,12 @@ void glslFft(const Mat& src, Mat& dst){
 			int bank = (Q & 1);	//FFT rows ‚Ì‰ñ”‚ªŠï”‚È‚ç‚ÎŠï”bank‚©‚ç
 			for (int p = 0, q = Q - 1; q >= 0; p++, q--, bank = bank ^ 1) {
 				for (int i = 0; i < 2; i++){
-					texSrc[i] = texid[bank * 4 + i * 2 + j];
-					texDst[i] = texid[(bank ^ 1) * 4 + i * 2 + j];
+					texSrc[i] = texid[bank    ][i * 2 + j];
+					texDst[i] = texid[bank ^ 1][i * 2 + j];
 				}
 				glslFftProcess(shader, texSrc, texDst, texW, 1, p, q, N, width, height);
 			}
 		}
-	}
-
-	dst = Mat(src.size(), src.type());
-	{	//download from texture
-		Timer tmr("-download:\t");
-#ifndef _USE_PBO_DOWN
-		Mat tmp = Mat(Size(width, height), src.type());
-		for (int i = 0; i < 4; i++){
-			void* data = tmp.data;
-
-			glBindTexture(GL_TEXTURE_RECTANGLE, texid[bank*4+i]);
-			glGetTexImage(GL_TEXTURE_RECTANGLE, 0, format, type, data);
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
-
-			int x = (i % 2) * width;
-			int y = (i / 2) * height;
-			Rect rect(x, y, width, height);
-			Mat roi = Mat(dst, rect);	// 1/2  1/2 rect
-			tmp.copyTo(roi);
-		}
-#else
-		int size = width*height * src.elemSize();
-		GLuint pbo[4];
-		glGenBuffers(4, pbo);
-		for (int i = 0; i < 4; i++){
-			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]);
-			glBufferData(GL_PIXEL_PACK_BUFFER, size, 0, GL_DYNAMIC_READ);
-			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-		}
-
-		for (int i = 0; i < 4; i++){
-			int x = (i % 2) * width;
-			int y = (i / 2) * height;
-			Rect rect(x, y, width, height);
-			Mat roi = Mat(dst, rect);	// 1/2  1/2 rect
-
-			//Copy pixels from texture object to pbo_bank
-			glBindTexture(GL_TEXTURE_RECTANGLE, texid[bank*4 + i]);
-			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]); //bind pbo
-			glGetTexImage(GL_TEXTURE_RECTANGLE, 0, format, type, 0);
-			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
-
-			//bind current pbo for app->pbo transfer
-			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]); //bind pbo
-			GLubyte* ptr = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, size,
-				GL_MAP_READ_BIT);
-			assert(ptr!=0);
-
-			int lSize = roi.cols * roi.elemSize();	// line size in byte
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-			for (int y = 0; y < roi.rows; y++){
-				uchar* pSrc = ptr + lSize * y;
-				uchar* pDst = roi.ptr<uchar>(y);
-				memcpy(pDst, pSrc, lSize);
-			}
-			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);		}
-		glDeleteBuffers(2, pbo);
-
-
-#endif
 	}
 
 	//clean up
@@ -483,12 +557,65 @@ void glslFft(const Mat& src, Mat& dst){
 	glDeleteBuffers(1, &vbo);
 
 	glDeleteFramebuffers(1, &fbo);
-	glDeleteTextures(sizeof(texid) / sizeof(texid[0]), texid);
-	glDeleteTextures(1 , &texW);
-
+	glDeleteTextures((GLsizei)texTmp.size(), &texTmp[0]);
+	glDeleteTextures(1, &texW);
 
 }
 
+
+void glslFft(const Mat& src, Mat& dst){
+	CV_Assert(src.type() == CV_32FC2);
+	CV_Assert(src.cols == src.rows);
+
+	int N = src.cols;
+	CV_Assert(IsPow2(N));
+
+	const int width = src.cols / 2;
+	const int height = src.rows / 2;
+
+	GLenum format = GL_RG;
+	GLenum type = GL_FLOAT;
+	GLenum internalFormat = GL_RG32F;
+
+	vector<GLuint> texArray(4);
+	//---------------------------------
+	// CreateTexture
+	{
+		//Timer tmr("CreateTexture:\t");
+		glGenTextures((GLsizei)texArray.size(), &texArray[0]); // create (reference to) a new texture
+
+		for (int i = 0; i < (int)texArray.size(); i++){
+			glBindTexture(GL_TEXTURE_RECTANGLE, texArray[i]);
+			// (set texture parameters here)
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+			glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+			//create the texture
+			glTexImage2D(GL_TEXTURE_RECTANGLE, 0, internalFormat, width, height, 0, format, type, 0);
+
+			glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+		}
+	}
+
+	//---------------------------------
+	//upload
+	glslFftUploadTexture(src, texArray);
+
+	//---------------------------------
+	//fft
+	glslFft(texArray);
+
+	//---------------------------------
+	//download
+	glslFftDownloadTexture(texArray,dst);
+
+	//---------------------------------
+	//clean up
+	glDeleteTextures((GLsizei)texArray.size(), &texArray[0]);
+
+}
 
 
 

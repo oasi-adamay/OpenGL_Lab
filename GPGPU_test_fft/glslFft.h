@@ -24,9 +24,10 @@ struct glslFftShader
 
 void glslFftInit(void);
 void glslFftTerminate(void);
+void glslFftUploadTexture(const Mat&src, const vector<GLuint>& texArray);
+void glslFftDownloadTexture(const vector<GLuint>& texArray, Mat&dst);
+void glslFft(vector<GLuint>& texArray);
 void glslFft(const Mat& src, Mat& dst);
-
-
 
 
 #endif
