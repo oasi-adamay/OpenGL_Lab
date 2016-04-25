@@ -16,6 +16,7 @@
 #pragma comment (lib, "glfw3dll.lib")
 
 // Usable AlmostEqual function
+static
 bool AlmostEqualUlpsAbsEps(float A, float B, int maxUlps , float maxDiff = 1e-3)
 {
 	// Check if the numbers are really close -- needed
@@ -232,7 +233,6 @@ int _tmain(int argc, _TCHAR* argv[])
 
 				if (!AlmostEqualUlpsAbsEps(dst[1], ref[1], ULPS)){
 					cout << cv::format("i(%4d,%4d)\t", x, y);
-					//				cout << cv::format("%8.2e\t", src[1]);
 					cout << cv::format("%8g\t", dst[1]);
 					cout << cv::format("%8g\t", ref[1]);
 					cout << cv::format("%8g\t", err[1]);

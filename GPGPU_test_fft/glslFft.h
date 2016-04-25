@@ -7,6 +7,8 @@ class glslBaseShader
 public:
 	glslBaseShader(void){ program = 0;}
 	~glslBaseShader(void){ glDeleteProgram(program); }
+	void LoadShadersFile(const char * vertex_file_path, const char * fragment_file_path);
+	void LoadShadersCode(const std::string& VertexShaderCode, const std::string& FragmentShaderCode);
 
 	//program
 	GLuint program;

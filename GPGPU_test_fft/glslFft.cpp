@@ -8,17 +8,251 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#ifdef NDEBUG
+#undef NDEBUG
+#include <assert.h>
+#define NDEBUG
+#else
+#include <assert.h>
+#endif
+
+
 
 #define _USE_PBO_UP
 //#define _USE_PBO_DOWN
+
+
+void glslBaseShader::LoadShadersCode(const std::string& VertexShaderCode, const std::string& FragmentShaderCode){
+	// Create the shaders
+	GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+	GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+
+
+	GLint Result = GL_FALSE;
+	int InfoLogLength;
+
+
+	// Compile Vertex Shader
+	//	printf("Compiling shader : %s\n", vertex_file_path);
+//	cout << "Compiling shader : " << vertex_file_path << endl;
+	cout << "Compiling vertex shader" << endl;
+	char const * VertexSourcePointer = VertexShaderCode.c_str();
+	glShaderSource(VertexShaderID, 1, &VertexSourcePointer, NULL);
+	glCompileShader(VertexShaderID);
+
+	// Check Vertex Shader
+	glGetShaderiv(VertexShaderID, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(VertexShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength > 0){
+		std::vector<char> VertexShaderErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(VertexShaderID, InfoLogLength, NULL, &VertexShaderErrorMessage[0]);
+		//		printf("%s\n", &VertexShaderErrorMessage[0]);
+		cout << &VertexShaderErrorMessage[0] << endl;
+	}
+	assert(Result == GL_TRUE);
+
+
+
+	// Compile Fragment Shader
+//	cout << "Compiling shader : " << fragment_file_path << endl;
+	cout << "Compiling fragment shader" << endl;
+	char const * FragmentSourcePointer = FragmentShaderCode.c_str();
+	glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer, NULL);
+	glCompileShader(FragmentShaderID);
+
+	// Check Fragment Shader
+	glGetShaderiv(FragmentShaderID, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(FragmentShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength > 0){
+		std::vector<char> FragmentShaderErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(FragmentShaderID, InfoLogLength, NULL, &FragmentShaderErrorMessage[0]);
+		//		printf("%s\n", &FragmentShaderErrorMessage[0]);
+		cout << &FragmentShaderErrorMessage[0] << endl;
+	}
+	assert(Result == GL_TRUE);
+
+
+	// Link the program
+	//	printf("Linking program\n");
+	cout << "Linking program" << endl;
+	GLuint ProgramID = glCreateProgram();
+	glAttachShader(ProgramID, VertexShaderID);
+	glAttachShader(ProgramID, FragmentShaderID);
+	glLinkProgram(ProgramID);
+
+	// Check the program
+	glGetProgramiv(ProgramID, GL_LINK_STATUS, &Result);
+	glGetProgramiv(ProgramID, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength > 0){
+		std::vector<char> ProgramErrorMessage(InfoLogLength + 1);
+		glGetProgramInfoLog(ProgramID, InfoLogLength, NULL, &ProgramErrorMessage[0]);
+		//		printf("%s\n", &ProgramErrorMessage[0]);
+		cout << &ProgramErrorMessage[0] << endl;
+	}
+	assert(Result == GL_TRUE);
+
+
+	glDetachShader(ProgramID, VertexShaderID);
+	glDetachShader(ProgramID, FragmentShaderID);
+
+	glDeleteShader(VertexShaderID);
+	glDeleteShader(FragmentShaderID);
+
+	program = ProgramID;
+
+}
+
+void glslBaseShader::LoadShadersFile(const char * vertex_file_path, const char * fragment_file_path){
+
+
+	// Read the Vertex Shader code from the file
+	std::string VertexShaderCode;
+	std::ifstream VertexShaderStream(vertex_file_path, std::ios::in);
+	if (VertexShaderStream.is_open()){
+		std::string Line = "";
+		while (getline(VertexShaderStream, Line))
+			VertexShaderCode += "\n" + Line;
+		VertexShaderStream.close();
+	}
+	else{
+		cout << "Impossible to open:" << vertex_file_path << endl;
+		assert(0);
+	}
+
+	// Read the Fragment Shader code from the file
+	std::string FragmentShaderCode;
+	std::ifstream FragmentShaderStream(fragment_file_path, std::ios::in);
+	if (FragmentShaderStream.is_open()){
+		std::string Line = "";
+		while (getline(FragmentShaderStream, Line))
+			FragmentShaderCode += "\n" + Line;
+		FragmentShaderStream.close();
+	}
+	else{
+		cout << "Impossible to open:" << fragment_file_path << endl;
+		assert(0);
+	}
+
+	LoadShadersCode(VertexShaderCode, FragmentShaderCode);
+
+}
 
 //-----------------------------------------------------------------------------
 //glslFftShader
 glslFftShader::glslFftShader(void)
 	:glslBaseShader()
 {
+	const char vertexShaderCode[] = 
+"#version 330 core\n"
+"layout (location = 0)in  vec2 position;\n"
+"void main(void)\n"
+"{\n"
+"   gl_Position  = vec4(position,0.0,1.0);\n"
+"}\n"
+;
+
+	const char fragmentShaderCode[] = 
+"#version 330 core\n"
+"precision highp float;\n"
+"uniform sampler2DRect	texSrc0;\n"
+"uniform sampler2DRect	texSrc1;\n"
+"uniform sampler2DRect	texW;\n"
+"uniform  int i_flag;	//bit0:(0:holizontal 1:vertical)\n"
+"uniform  int i_N;\n"
+"uniform  int i_p;\n"
+"uniform  int i_q;\n"
+"uniform  float f_xscl;\n"
+"uniform  float f_yscl;\n"
+"uniform  float f_xconj;\n"
+"uniform  float f_yconj;\n"
+"\n"
+"layout (location = 0) out vec2 dst0;\n"
+"layout (location = 1) out vec2 dst1;\n"
+"\n"
+"#define FLAG_DIR	 (1<<0)\n"
+"\n"
+"\n"
+"int insertZeroBits(\n"
+"	const int src,\n"
+"	const int idx,\n"
+"	const int num\n"
+"	)\n"
+"{\n"
+"	int ret = src << num;\n"
+"	ret &= ~((1 << (idx + num)) - 1);\n"
+"	ret |= src & ((1 << idx) - 1);\n"
+"	return ret;\n"
+"}\n"
+"\n"
+"void main(void)\n"
+"{\n"
+"	int p = i_p;\n"
+"	int q = i_q;\n"
+"	int N = i_N;\n"
+"	int dir = ((i_flag & FLAG_DIR)==0) ?0:1;\n"
+"	float xscl = f_xscl;\n"
+"	float yscl = f_yscl;\n"
+"	float xconj = f_xconj;\n"
+"	float yconj = f_yconj;\n"
+"\n"
+"	int n;\n"
+"	vec2 x0;\n"
+"	vec2 x1;\n"
+"	vec2 w;\n"
+"\n"
+"	n= int(gl_FragCoord[dir]);\n"
+"	int iw = (n >> q) << q;\n"
+"	int ix0 = insertZeroBits(n, q, 1);\n"
+"	int ix1 = ix0 + (1 << q);\n"
+"	w = texture(texW,vec2(iw,0)).rg;\n"
+"\n"
+"\n"
+"	if(dir ==0){\n"
+"		if(ix0 < N/2) x0 = texture(texSrc0,vec2(ix0,gl_FragCoord.y)).rg;\n"
+"		else x0 = texture(texSrc1,vec2(ix0-N/2,gl_FragCoord.y)).rg;\n"
+"\n"
+"		if(ix1 < N/2) x1 = texture(texSrc0,vec2(ix1,gl_FragCoord.y)).rg;\n"
+"		else x1 = texture(texSrc1,vec2(ix1-N/2,gl_FragCoord.y)).rg;\n"
+"	}\n"
+"	else{\n"
+"		if(ix0 < N/2) x0 = texture(texSrc0,vec2(gl_FragCoord.x,ix0)).rg;\n"
+"		else x0 = texture(texSrc1,vec2(gl_FragCoord.x,ix0-N/2)).rg;\n"
+"\n"
+"		if(ix1 < N/2) x1 = texture(texSrc0,vec2(gl_FragCoord.x,ix1)).rg;\n"
+"		else x1 = texture(texSrc1,vec2(gl_FragCoord.x,ix1-N/2)).rg;\n"
+"	}\n"
+"\n"
+"	x0 = x0*xscl;\n"
+"	x1 = x1*xscl;\n"
+"	x0.g = x0.g*xconj;\n"
+"	x1.g = x1.g*xconj;\n"
+"\n"
+"	vec2 tmp;\n"
+"	tmp.r = x1.r * w.r - x1.g * w.g;\n"
+"	tmp.g = x1.r * w.g + x1.g * w.r;\n"
+"\n"
+"	vec2 y0;\n"
+"	vec2 y1;\n"
+"\n"
+"	y0 = x0 + tmp;\n"
+"	y1 = x0 - tmp;\n"
+"\n"
+"	y0 = y0*yscl;\n"
+"	y1 = y1*yscl;\n"
+"	y0.g = y0.g*yconj;\n"
+"	y1.g = y1.g*yconj;\n"
+"\n"
+"	dst0 = y0;\n"
+"	dst1 = y1;\n"
+"\n"
+"}\n"
+;
+	
+	
+
 	// Create and compile our GLSL program from the shaders
-	program = LoadShaders("Fft_vs.glsl", "FftRadix2_fs.glsl");
+//	LoadShadersFile("Fft_vs.glsl", "FftRadix2_fs.glsl");
+	LoadShadersCode(vertexShaderCode, fragmentShaderCode);
 
 	// Attribute & Uniform location
 	position = glGetAttribLocation(program, "position");
@@ -39,7 +273,7 @@ glslConjShader::glslConjShader(void)
 	:glslBaseShader()
 {
 	// Create and compile our GLSL program from the shaders
-	program = LoadShaders("Fft_vs.glsl", "Conj_fs.glsl");
+	LoadShadersFile("Fft_vs.glsl", "Conj_fs.glsl");
 
 	// Attribute & Uniform location
 	position = glGetAttribLocation(program, "position");
@@ -299,7 +533,7 @@ void glslFftInit(void){
 	}
 
 	shaderFft = new glslFftShader();
-	shaderConj = new glslConjShader();
+//	shaderConj = new glslConjShader();
 
 }
 
@@ -308,7 +542,7 @@ void glslFftInit(void){
 void glslFftTerminate(void){
 
 	delete shaderFft;
-	delete shaderConj;
+//	delete shaderConj;
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
@@ -318,6 +552,7 @@ void glslFftTerminate(void){
 //-----------------------------------------------------------------------------
 //Upload texture from cv::Mat to GL texture
 void glslFftUploadTexture(const Mat&src, const vector<GLuint>& texArray){
+	Timer tmr("-upload :\t");
 	CV_Assert(src.type() == CV_32FC2);
 	CV_Assert(src.cols == src.rows);
 	assert(texArray.size() == 4);
@@ -329,7 +564,6 @@ void glslFftUploadTexture(const Mat&src, const vector<GLuint>& texArray){
 	GLenum type = GL_FLOAT;
 
 	{
-		Timer tmr("-upload :\t");
 #ifdef _USE_PBO_UP
 		int size = width*height * (int)src.elemSize();
 		GLuint pbo[4];
@@ -361,7 +595,9 @@ void glslFftUploadTexture(const Mat&src, const vector<GLuint>& texArray){
 				uchar* pDst = ptr + lSize * y;
 				memcpy(pDst, pSrc, lSize);
 			}
-			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);			//Copy pixels from pbo to texture object
+			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+
+			//Copy pixels from pbo to texture object
 			glBindTexture(GL_TEXTURE_RECTANGLE, texArray[i]);
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[i]); //bind pbo
 			glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, format, type, 0);
@@ -396,6 +632,8 @@ void glslFftUploadTexture(const Mat&src, const vector<GLuint>& texArray){
 //Download texture from GL textures to cv::Mat
 void glslFftDownloadTexture(const vector<GLuint>& texArray, Mat&dst)
 {
+	Timer tmr("-download:\t");
+
 	assert(texArray.size() == 4);
 	Size size = getTextureSize(texArray[0]);
 	dst = Mat(size*2, CV_32FC2);
@@ -407,7 +645,6 @@ void glslFftDownloadTexture(const vector<GLuint>& texArray, Mat&dst)
 	GLenum type = GL_FLOAT;
 
 	{	//download from texture
-		Timer tmr("-download:\t");
 #ifdef _USE_PBO_DOWN
 		int size = width*height * dst.elemSize();
 		GLuint pbo[4];
@@ -446,7 +683,8 @@ void glslFftDownloadTexture(const vector<GLuint>& texArray, Mat&dst)
 				uchar* pDst = roi.ptr<uchar>(y);
 				memcpy(pDst, pSrc, lSize);
 			}
-			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);		}
+			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+		}
 		glDeleteBuffers(2, pbo);
 #else
 		Mat tmp = Mat(Size(width, height), dst.type());
@@ -580,8 +818,10 @@ void glslFft(vector<GLuint>& texArray,int flag){
 	}
 
 	//---------------------------------
-	// upload teidle texture
+	// upload twidle texture
 	{
+		Timer tmr("-twidle:\t");
+
 		vector<vec2> w(N / 2);
 		// --- twidle ----
 		//#ifdef _OPENMP
