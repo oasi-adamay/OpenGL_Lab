@@ -5,6 +5,13 @@
 
 #pragma once
 
+#include "targetver.h"
+
+#define WIN32_LEAN_AND_MEAN             // Windows ヘッダーから使用されていない部分を除外します。
+
+
+
+// TODO: プログラムに必要な追加ヘッダーをここで参照してください。
 #include <stdio.h>
 #include <tchar.h>
 #include <string>
@@ -12,21 +19,8 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <memory>
 using namespace std;
-
-
-
-
-// TODO: プログラムに必要な追加ヘッダーをここで参照してください。
-
-#ifdef NDEBUG
-#undef NDEBUG
-#include <assert.h>
-#define NDEBUG
-#else
-#include <assert.h>
-#endif
-
 
 //---------------------
 // OpenCV
@@ -48,3 +42,5 @@ using namespace cv;
 #include <glm/matrix.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 using namespace glm;
+
+

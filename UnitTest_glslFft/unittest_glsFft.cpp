@@ -3,28 +3,31 @@
 #include "HookCoutCerr.h"
 #include "Timer.h"
 
-#include "../GPGPU_test_fft/glslFft.h"
+#include "glsCV.h"
 
 //Lib 
 #pragma comment (lib, "opengl32.lib")
 #pragma comment (lib, "glew32.lib")
 #pragma comment (lib, "glfw3dll.lib")
 
+#pragma comment (lib, "glsCV.lib")
+
+
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
-namespace UnitTest_glslFft
+namespace UnitTest_glsCV
 {	
 	HookCoutCerr hook;
-#if 0
+#if 1
 	TEST_MODULE_INITIALIZE(test_module_initialize) {
 		cout << __FUNCTION__ << endl;
-		glslFftInit();
+		glsCvInit();
 
 	}
 	TEST_MODULE_CLEANUP(test_module_cleanup)  {
 		cout << __FUNCTION__ << endl;
-		glslFftTerminate();
+		glsCvTerminate();
 	}
 #endif
 
@@ -54,9 +57,9 @@ namespace UnitTest_glslFft
 		return false;
 	}
 
-	int test_glslFft(const int N, const int flags){
+	int test_glsFft(const int N, const int flags){
 		int ULPS = 4096;
-		float EPS = 1e-3;
+		float EPS = 1e-3f;
 		Mat imgSrc = Mat(Size(N, N), CV_32FC2);
 		Mat imgFft = Mat::zeros(imgSrc.size(), imgSrc.type());
 		Mat imgFftRef = Mat::zeros(imgSrc.size(), imgSrc.type());
@@ -85,12 +88,12 @@ namespace UnitTest_glslFft
 
 		//---------------------------------
 		{
-			Timer tmr("glslFft:  \t");
+			Timer tmr("glsFft:  \t");
 			int _flags = 0;
 			if (flags & DFT_SCALE)	_flags |= GLSL_FFT_SCALE;
 			if (flags & DFT_INVERSE)_flags |= GLSL_FFT_INVERSE;
 
-			glslFft(imgSrc, imgFft, _flags);
+			glsFft(imgSrc, imgFft, _flags);
 		}
 
 		//verify
@@ -129,20 +132,20 @@ namespace UnitTest_glslFft
 	}
 
 
-	TEST_CLASS(UnitTest_glslFft)
+	TEST_CLASS(UnitTest_glsFft)
 	{
 	public:
 
 		TEST_CLASS_INITIALIZE(test_class_initialize)
 		{
 			cout << __FUNCTION__ << endl;
-			glslFftInit();
+			glsFftInit();
 		}
 
 		TEST_CLASS_CLEANUP(test_class_cleanup)
 		{
 			cout << __FUNCTION__ << endl;
-			glslFftTerminate();
+			glsFftTerminate();
 		}
 
 
@@ -151,7 +154,7 @@ namespace UnitTest_glslFft
 			cout << __FUNCTION__ << endl;
 			const int N = 256;
 			const int flags = 0;
-			int errNum = test_glslFft(N, flags);
+			int errNum = test_glsFft(N, flags);
 			Assert::AreEqual(0, errNum);
 		}
 
@@ -160,7 +163,7 @@ namespace UnitTest_glslFft
 			cout << __FUNCTION__ << endl;
 			const int N = 128;
 			const int flags = DFT_SCALE;
-			int errNum = test_glslFft(N, flags);
+			int errNum = test_glsFft(N, flags);
 			Assert::AreEqual(0, errNum);
 		}
 
@@ -169,7 +172,7 @@ namespace UnitTest_glslFft
 			cout << __FUNCTION__ << endl;
 			const int N = 64;
 			const int flags = DFT_INVERSE;
-			int errNum = test_glslFft(N, flags);
+			int errNum = test_glsFft(N, flags);
 			Assert::AreEqual(0, errNum);
 		}
 
@@ -178,7 +181,7 @@ namespace UnitTest_glslFft
 			cout << __FUNCTION__ << endl;
 			const int N = 32;
 			const int flags = DFT_INVERSE + DFT_SCALE;
-			int errNum = test_glslFft(N, flags);
+			int errNum = test_glsFft(N, flags);
 			Assert::AreEqual(0, errNum);
 		}
 

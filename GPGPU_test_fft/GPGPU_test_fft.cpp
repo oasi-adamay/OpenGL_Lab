@@ -2,11 +2,11 @@
 //
 
 #include "stdafx.h"
-#include "../common/shader.hpp"
-#include "glslFft.h"
+#include "glsFft.h"
 #include "HookCoutCerr.hpp"
 #include "Timer.hpp"
 
+#include "glsCV.h"
 
 
 
@@ -14,6 +14,9 @@
 #pragma comment (lib, "opengl32.lib")
 #pragma comment (lib, "glew32.lib")
 #pragma comment (lib, "glfw3dll.lib")
+
+#pragma comment (lib, "glsCV.lib")
+
 
 // Usable AlmostEqual function
 static
@@ -61,7 +64,8 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 //	HookCoutCerr hoge;
 
-	glslFftInit();
+	glsCvInit();
+	glsFftInit();
 
 //	const int N = 4;
 
@@ -110,15 +114,6 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		//imgFftRef = imgSrc.clone();
 	}
-	{
-		Timer tmr("cv:dft:   \t");
-		int flags = 0;
-		flags |= DFT_INVERSE;
-		cv::dft(imgFftRef, imgIfftRef, flags);
-	}
-
-
-
 #else
 	{
 		Timer tmr("fft_dit_Stockham_radix2_type1:   \t");
@@ -126,23 +121,31 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
+#if 0
+	{
+		Timer tmr("cv:dft:   \t");
+		int flags = 0;
+		flags |= DFT_INVERSE;
+		cv::dft(imgFftRef, imgIfftRef, flags);
+	}
+#endif
 
 
 
 #if 1
 	{
 		//1âÒñ⁄ÇÕíxÇ¢Å@Ç»Ç∫ÅH
-		Timer tmr("glslFft:\t");
+		Timer tmr("glsFft:\t");
 		Mat tmp;
 		int flags = 0;
 		flags |= GLSL_FFT_SCALE;
-		glslFft(imgSrc, tmp, flags);
+		glsFft(imgSrc, tmp, flags);
 	}
 	{
-		Timer tmr("glslFft:\t");
+		Timer tmr("glsFft:\t");
 		int flags = 0;
 		flags |= GLSL_FFT_SCALE;
-		glslFft(imgSrc, imgFft, flags);
+		glsFft(imgSrc, imgFft, flags);
 	}
 
 #elif 1
@@ -169,19 +172,19 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #endif
 
-#if 1
+#if 0
 	{
-		Timer tmr("glslFft(I):\t");
+		Timer tmr("glsFft(I):\t");
 		Mat tmp;
 		int flags = 0;
 		flags |= GLSL_FFT_INVERSE;
-		glslFft(imgFft, tmp, flags);
+		glsFft(imgFft, tmp, flags);
 	}
 	{
-		Timer tmr("glslFft(I):\t");
+		Timer tmr("glsFft(I):\t");
 		int flags = 0;
 		flags |= GLSL_FFT_INVERSE;
-		glslFft(imgFft, imgIfft, flags);
+		glsFft(imgFft, imgIfft, flags);
 	}
 #endif
 
@@ -264,7 +267,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			}
 		}
 
-#if 1
+#if 0
 		for (int y = 0; y < height; y++){
 			for (int x = 0; x < width; x++){
 				Vec2f ref = imgIfftRef.at<Vec2f>(y, x);
@@ -298,7 +301,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	cin.get();
 
 
-	glslFftTerminate();
+	glsFftTerminate();
+	glsCvTerminate();
+
 	return errNum;
 }
 

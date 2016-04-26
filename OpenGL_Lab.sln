@@ -16,8 +16,16 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GPGPU_test_copy", "GPGPU_test_copy\GPGPU_test_copy.vcxproj", "{ADD292EA-4DF1-4B7B-8013-4AC362307DCE}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GPGPU_test_fft", "GPGPU_test_fft\GPGPU_test_fft.vcxproj", "{207F5FF1-0825-487F-89D9-313A517E0324}"
+	ProjectSection(ProjectDependencies) = postProject
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72} = {52C59688-DAF7-4AC3-BE6C-D6906409AA72}
+	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UnitTest_glslFft", "UnitTest_glslFft\UnitTest_glslFft.vcxproj", "{0668C620-4D35-4E36-9F07-DD11C5DDC589}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UnitTest_glsCV", "UnitTest_glslFft\UnitTest_glslFft.vcxproj", "{0668C620-4D35-4E36-9F07-DD11C5DDC589}"
+	ProjectSection(ProjectDependencies) = postProject
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72} = {52C59688-DAF7-4AC3-BE6C-D6906409AA72}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "glsCV", "glsCV\glsCV.vcxproj", "{52C59688-DAF7-4AC3-BE6C-D6906409AA72}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -125,6 +133,18 @@ Global
 		{0668C620-4D35-4E36-9F07-DD11C5DDC589}.Release|Win32.Build.0 = Release|Win32
 		{0668C620-4D35-4E36-9F07-DD11C5DDC589}.Release|x64.ActiveCfg = Release|x64
 		{0668C620-4D35-4E36-9F07-DD11C5DDC589}.Release|x64.Build.0 = Release|x64
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Debug|Win32.ActiveCfg = Debug|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Debug|Win32.Build.0 = Debug|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Debug|x64.ActiveCfg = Debug|x64
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Debug|x64.Build.0 = Debug|x64
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Release|Win32.ActiveCfg = Release|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Release|Win32.Build.0 = Release|Win32
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Release|x64.ActiveCfg = Release|x64
+		{52C59688-DAF7-4AC3-BE6C-D6906409AA72}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
